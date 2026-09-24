@@ -3,10 +3,14 @@ import codecs
 from dataclasses import dataclass
 
 import os
-import fcntl
-import pty
 import struct
-import termios
+import sys
+
+if sys.platform != "win32":
+    # Unix-only; Windows support for these is pending (see shell.py)
+    import fcntl
+    import pty
+    import termios
 
 
 from textual import events

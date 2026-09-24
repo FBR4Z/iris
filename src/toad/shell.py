@@ -5,13 +5,18 @@ from contextlib import suppress
 import os
 import asyncio
 import codecs
-import fcntl
 import platform
-import pty
 import struct
-import termios
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+import sys
+
+if sys.platform != "win32":
+    # Unix-only; Windows support for these is pending (see shell.py)
+    import fcntl
+    import pty
+    import termios
+
 
 from textual import log
 from textual.message import Message
@@ -24,6 +29,7 @@ if TYPE_CHECKING:
     from toad.widgets.conversation import Conversation
 
 IS_MACOS = platform.system() == "Darwin"
+IS_WINDOWS = sys.platform == "win32"
 
 
 def resize_pty(fd, cols, rows):
@@ -123,7 +129,14 @@ class Shell:
     async def send(self, command: str, width: int, height: int) -> None:
         await self._ready_event.wait()
         if self.master is None:
-            print("TTY FD not set")
+            if IS_WINDOWS:
+                self.conversation.notify(
+                    "O shell integrado ainda não funciona no Windows.",
+                    title="Shell",
+                    severity="warning",
+                )
+            else:
+                print("TTY FD not set")
             return
 
         if self.terminal is not None:
@@ -187,6 +200,11 @@ class Shell:
 
     async def run(self) -> None:
         current_directory = self.working_directory
+
+        if IS_WINDOWS:
+            # No pty on Windows yet: leave the shell idle so the UI doesn't block on it.
+            self._ready_event.set()
+            return
 
         master, slave = pty.openpty()
         self.master = master

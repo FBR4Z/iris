@@ -3,15 +3,20 @@ from __future__ import annotations
 import asyncio
 from asyncio.subprocess import Process
 import codecs
-import fcntl
 import os
-import pty
 import shlex
 from collections import deque
 from dataclasses import dataclass
 import struct
-import termios
 from typing import Iterable, Mapping
+import sys
+
+if sys.platform != "win32":
+    # Unix-only; Windows support for these is pending (see shell.py)
+    import fcntl
+    import pty
+    import termios
+
 
 from textual.content import Content
 from textual.reactive import var

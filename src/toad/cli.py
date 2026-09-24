@@ -1,5 +1,13 @@
 import sys
 
+if sys.platform == "win32":
+    # Windows consoles default to a legacy codepage, which can't encode emoji / accents.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
+
 import click
 from toad.app import ToadApp
 from toad.agent_schema import Agent

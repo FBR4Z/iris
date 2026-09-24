@@ -4,6 +4,7 @@ from contextlib import suppress
 from datetime import datetime
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, cast, NamedTuple
 from copy import deepcopy
@@ -724,7 +725,8 @@ class Agent(AgentBase):
                         "readTextFile": True,
                         "writeTextFile": True,
                     },
-                    "terminal": True,
+                    # Our terminal tool needs a pty; on Windows let the agent run commands itself.
+                    "terminal": sys.platform != "win32",
                 },
                 {
                     "name": toad.NAME,
