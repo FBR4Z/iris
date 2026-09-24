@@ -210,7 +210,7 @@ class Agent(AgentBase):
         def write_log(log_file_path: Path, line: str):
             """Write log in a thread."""
             try:
-                with log_file_path.open("at") as log_file:
+                with log_file_path.open("at", encoding="utf-8") as log_file:
                     log_file.write(f"{line.rstrip()}\n")
             except OSError:
                 pass

@@ -59,7 +59,7 @@ class History:
             """
             try:
                 self.path.touch(exist_ok=True)
-                with self.path.open("r") as history_file:
+                with self.path.open("r", encoding="utf-8") as history_file:
                     self._lines = history_file.readlines()
 
                 inputs: list[str] = []
@@ -102,7 +102,7 @@ class History:
             line = json.dumps(history_entry)
             self._lines.append(line)
             try:
-                with self.path.open("a") as history_file:
+                with self.path.open("a", encoding="utf-8") as history_file:
                     history_file.write(f"{line}\n")
             except Exception:
                 return False

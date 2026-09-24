@@ -70,7 +70,7 @@ def render(app: ToadApp) -> str:
     """
 
     try:
-        config: str | None = app.settings_path.read_text()
+        config: str | None = app.settings_path.read_text("utf-8")
     except Exception:
         config = None
 
