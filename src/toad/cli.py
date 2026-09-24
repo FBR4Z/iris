@@ -73,7 +73,7 @@ class DefaultCommandGroup(click.Group):
 @click.option("-v", "--version", is_flag=True, help="Show version and exit.")
 @click.pass_context
 def main(ctx, version):
-    """🐸 Toad — AI for your terminal."""
+    """Íris — Claude, Codex e Gemini no seu terminal."""
     if version:
         from toad import get_version
 

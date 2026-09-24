@@ -1,7 +1,7 @@
 [project]
-name = "batrachian-toad"
+name = "iris-cli"
 version = "0.6.20"
-description = "A unified experience for AI in your terminal."
+description = "Íris — Claude, Codex e Gemini numa interface só (fork do Toad)."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -38,7 +38,7 @@ members = ["toad"]
 #rich = { path = "../rich", editable = true }
 
 [project.scripts]
-toad = "toad.cli:main"
+iris = "toad.cli:main"
 
 [build-system]
 requires = ["hatchling==1.28.0"]
