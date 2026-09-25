@@ -265,8 +265,8 @@ class ToadApp(App, inherit_bindings=False):
     scrollbar: reactive[str] = reactive("normal")
     last_ctrl_c_time = reactive(0.0)
     update_required: reactive[bool] = reactive(False)
-    terminal_title: var[str] = var("Toad")
-    terminal_title_icon: var[str] = var("🐸")
+    terminal_title: var[str] = var(toad.TITLE)
+    terminal_title_icon: var[str] = var(toad.ICON)
     terminal_title_flash = var(0)
     terminal_title_blink = var(False)
     project_dir = var(Path)
@@ -539,7 +539,9 @@ class ToadApp(App, inherit_bindings=False):
         notification = Notify()
         notification.message = message
         notification.title = title
-        notification.application_name = "🐸 Toad" if toad.os == "macos" else "Toad"
+        notification.application_name = (
+            f"{toad.ICON} {toad.TITLE}" if toad.os == "macos" else toad.TITLE
+        )
         if sound and self.settings.get("notifications.enable_sounds", bool):
             sound_path = str(files("toad.data").joinpath(f"sounds/{sound}.wav"))
             notification.audio = sound_path
@@ -696,7 +698,7 @@ class ToadApp(App, inherit_bindings=False):
                     version_meta.upgrade_message,
                     style="magenta",
                     border_style="dim green",
-                    title="🐸 [bold green not dim]Update available![/] 🐸",
+                    title=f"{toad.ICON} [bold green not dim]Update available![/] {toad.ICON}",
                     expand=False,
                     padding=(1, 2),
                 )
@@ -706,6 +708,8 @@ class ToadApp(App, inherit_bindings=False):
     @work(exit_on_error=False)
     async def run_version_check(self) -> None:
         """Check remote version."""
+        # Íris is a fork: upstream Toad releases don't apply, so skip the nag.
+        return
         from toad.version import check_version, VersionCheckFailed
 
         try:

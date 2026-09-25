@@ -56,9 +56,12 @@ StoreScreen {
             grid-rows: auto;
             grid-gutter: 1 2;
             min-width: 40;       
-            Mandelbrot {   
-                border: none;             
-                height: 100%;                                                                
+            IrisOrb {
+                border: none;
+                height: 100%;
+            }
+            #info {
+                min-height: 9;
             }
         }        
     }

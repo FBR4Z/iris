@@ -47,9 +47,14 @@ class IrisOrb(Widget):
     LABEL_LINES = 2
 
     def __init__(
-        self, name: str | None = None, id: str | None = None, classes: str | None = None
+        self,
+        show_label: bool = True,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
     ) -> None:
         super().__init__(name=name, id=id, classes=classes)
+        self.show_label = show_label
         self._start = monotonic()
         self._last_frame = self._start
         # Integrated rotation angle, so speed changes don't make the ring jump.
@@ -83,7 +88,8 @@ class IrisOrb(Widget):
         """Returns (connected, busy, planning, mode name)."""
         conversation = self._conversation()
         if conversation is None:
-            return False, False, True, ""
+            # Outside a conversation (e.g. the launcher): just idle.
+            return True, False, True, ""
         mode = conversation.current_mode
         mode_name = mode.name if mode is not None else ""
         plan_words = [
@@ -129,9 +135,13 @@ class IrisOrb(Widget):
             intensity = 0.35 + 0.15 * breath
 
         width = self.size.width
-        rows = max(self.size.height - self.LABEL_LINES, 1)
+        label_lines = self.LABEL_LINES if self.show_label else 0
+        rows = max(self.size.height - label_lines, 1)
         text = self._render_ring(width, rows, elapsed, intensity)
-        text.append(self._render_label(width, connected, busy, planning, mode_name))
+        if self.show_label:
+            text.append(self._render_label(width, connected, busy, planning, mode_name))
+        else:
+            text.rstrip()
         return text
 
     def _render_ring(

@@ -45,11 +45,11 @@ class DangerWarning(Widget):
     def render(self) -> Content:
         if self.level == DangerLevel.DANGEROUS:
             return Content.from_markup(
-                "🐸 Potentially dangeous operation — [dim]please review carefully!"
+                "⚠ Operação potencialmente perigosa — [dim]revise com atenção!"
             )
         else:
             return Content.from_markup(
-                "🐸 [b]Destructive operation[/b] (may alter files outside of project directory) — [dim]please review carefully!"
+                "⚠ [b]Operação destrutiva[/b] (pode alterar arquivos fora da pasta do projeto) — [dim]revise com atenção!"
             )
 
 

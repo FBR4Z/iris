@@ -9,6 +9,8 @@ if sys.platform == "win32":
             pass
 
 import click
+
+import toad
 from toad.app import ToadApp
 from toad.agent_schema import Agent
 
@@ -308,7 +310,7 @@ def serve(port: int, host: str, public_url: str | None = None) -> None:
     from textual_serve.server import Server
 
     server = Server(
-        sys.argv[0], host=host, port=port, title="Toad", public_url=public_url
+        sys.argv[0], host=host, port=port, title=toad.TITLE, public_url=public_url
     )
     set_process_title("toad serve")
     server.serve()

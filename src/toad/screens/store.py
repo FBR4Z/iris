@@ -25,7 +25,7 @@ from toad.format_path import format_path
 from toad.pill import pill
 from toad import messages
 from toad.widgets.directory_input import DirectoryInput
-from toad.widgets.mandelbrot import Mandelbrot
+from toad.widgets.iris_orb import IrisOrb
 from toad.widgets.condensed_path import CondensedPath
 from toad.widgets.grid_select import GridSelect
 from toad.agent_schema import Agent
@@ -381,7 +381,7 @@ class StoreScreen(Screen):
     def compose(self) -> ComposeResult:
         with containers.VerticalGroup(id="title-container"):
             with containers.Grid(id="title-grid"):
-                yield Mandelbrot()
+                yield IrisOrb(show_label=False)
                 yield widgets.Label(self.get_info(), id="info")
         yield DirectoryDisplay(self.project_dir).data_bind(
             project_dir=StoreScreen.project_dir
@@ -390,27 +390,17 @@ class StoreScreen(Screen):
         yield widgets.Footer()
 
     def get_info(self) -> Content:
-        toad_version = toad.get_version()
+        version = toad.get_version()
         content = Content.assemble(
-            Content.from_markup("🐸 Toad"),
-            pill(f"v{toad_version}", "$primary-muted", "$text-primary"),
-            ("\nThe universal interface for AI in your terminal", "$text-success"),
-            (
-                "\nSoftware lovingly crafted by hand (with a dash of AI) in Edinburgh, Scotland",
-                "dim",
-            ),
-            "\n",
-            (
-                Content.from_markup(
-                    "\nClick and hold to zoom the fractal, [b dim]ctrl+click[/] to zoom out."
-                )
-            ),
+            Content.from_markup(f"[b]{toad.ICON} {toad.TITLE}[/b]"),
+            pill(f"v{version}", "$primary-muted", "$text-primary"),
+            ("\nClaude, Codex e Gemini num só lugar", "$text-success"),
+            ("\nEscolha um agente abaixo para começar.", "dim"),
             "\n\n",
             (
                 Content.from_markup(
-                    "[dim]Code: [@click=screen.url('https://github.com/batrachianai/toad')]Repository[/] • "
-                    "Bugs: [@click=screen.url('https://github.com/batrachianai/toad/discussions')]Discussions[/] • "
-                    "Sponsor: [@click=screen.url('https://github.com/sponsors/willmcgugan')]@willmcgugan[/]"
+                    "[dim]Fork do [@click=screen.url('https://github.com/batrachianai/toad')]Toad[/], "
+                    "de Will McGugan — licença AGPL-3.0"
                 )
             ),
         )
@@ -445,10 +435,6 @@ class StoreScreen(Screen):
                 with AgentGridSelect(classes="agents-picker", min_column_width=40):
                     for agent in recommended_agents:
                         yield AgentItem(agent)
-                    yield widgets.Static(
-                        "[$text-warning]Your agent here[/] — support development of Toad by [@click=screen.url('https://github.com/sponsors/willmcgugan')]sponsoring[/] this project",
-                        classes="sponsor-me",
-                    )
 
         chat_bots = [
             agent for agent in ordered_agents if agent["type"] in {"chat", "assistant"}
