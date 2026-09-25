@@ -12,7 +12,7 @@ publisher_url = "https://willmcgugan.github.io/"
 type = "coding"
 description = "Query and edit large codebases, generate apps from images or PDFs, and automate complex workflows—all from your terminal."
 tags = []
-run_command."*" = "gemini --experimental-acp"
+run_command."*" = "gemini --acp"
 
 help = '''
 # Gemini CLI

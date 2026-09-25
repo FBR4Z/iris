@@ -12,8 +12,9 @@ SCHEMA: list[SchemaDict] = [
                 "title": "Theme",
                 "help": "One of the builtin Textual themes.",
                 "type": "choices",
-                "default": "dracula",
+                "default": "iris",
                 "choices": [
+                    "iris",
                     "atom-one-dark",
                     "atom-one-light",
                     "catppuccin-latte",
@@ -38,7 +39,7 @@ SCHEMA: list[SchemaDict] = [
                 "title": "Prompt message",
                 "help": "Text shown as placeholder in prompt text area",
                 "type": "string",
-                "default": "How can I help you today?",
+                "default": "Como posso ajudar hoje?",
             },
             {
                 "key": "compact-input",
@@ -354,7 +355,7 @@ SCHEMA: list[SchemaDict] = [
                 "key": "agents",
                 "title": "Agents to show in the launcher",
                 "type": "text",
-                "default": "",
+                "default": "claude.com\ngeminicli.com\nopenai.com",
             }
         ],
     },
@@ -369,7 +370,8 @@ SCHEMA: list[SchemaDict] = [
                 "title": "Allow collection of anonymous usage data?",
                 "help": "Toad can collect basic usage data (number of installs, OS version, agents used, session length etc). This information is associated with a randomly generated UUID (see it in /about:toad) and contains no personal information.\n\nCollecting this information will help me (Will McGugan) convince big tech to take this project seriously. I would appreciate if you left this on, but it is entirely up to you.",
                 "type": "boolean",
-                "default": True,
+                # Íris: opt-in, since it may run on company machines.
+                "default": False,
             },
         ],
     },
@@ -399,6 +401,13 @@ SCHEMA: list[SchemaDict] = [
                 "help": "Palavras, separadas por vírgula, que identificam um modo de planejamento pelo id ou nome do modo do agente.",
                 "type": "string",
                 "default": "plan, read-only",
+            },
+            {
+                "key": "agents",
+                "title": "Agentes na tela inicial",
+                "help": "Identidades dos agentes exibidos na tela inicial, separadas por vírgula. Deixe vazio para mostrar todos.",
+                "type": "string",
+                "default": "claude.com, openai.com, geminicli.com",
             },
         ],
     },

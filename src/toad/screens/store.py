@@ -261,7 +261,7 @@ class Launcher(containers.VerticalGroup):
                         yield LauncherItem(digit or "", agents[identity])
 
         if not launcher_agents:
-            yield widgets.Label("Choose your fighter below!", classes="no-agents")
+            yield widgets.Label("Escolha um agente abaixo!", classes="no-agents")
 
     def launch_highlighted(self) -> None:
         self.grid_select.action_launch()
@@ -429,7 +429,7 @@ class StoreScreen(Screen):
         if recommended_agents:
             with containers.VerticalGroup(id="sponsored-agents", classes="recommended"):
                 yield widgets.Static(
-                    "[$text-warning u]Recommended[/] [$text-secondary 100% i]Best of the bunch",
+                    "[$text-warning u]Recomendados[/] [$text-secondary 100% i]Os melhores",
                     classes="heading",
                 )
                 with AgentGridSelect(classes="agents-picker", min_column_width=40):
@@ -441,7 +441,7 @@ class StoreScreen(Screen):
         ]
         if chat_bots:
             yield widgets.Static(
-                "[$text-warning u]Chat & Assistants[/] [$text-secondary 100% i]Biddi-biddi-biddi",
+                "[$text-warning u]Chat e assistentes[/]",
                 classes="heading",
             )
             with containers.VerticalGroup():
@@ -452,7 +452,7 @@ class StoreScreen(Screen):
         coding_agents = [agent for agent in ordered_agents if agent["type"] == "coding"]
         if coding_agents:
             yield widgets.Static(
-                "[$text-warning u]Coding agents[/] [$text-secondary i]Build software with AI",
+                "[$text-warning u]Agentes de código[/] [$text-secondary i]Claude, Codex e Gemini",
                 classes="heading",
             )
             with containers.VerticalGroup():
@@ -534,7 +534,19 @@ class StoreScreen(Screen):
     async def on_mount(self) -> None:
         self.app.settings_changed_signal.subscribe(self, self.setting_updated)
         try:
-            self._agents = await read_agents()
+            agents = await read_agents()
+            wanted = [
+                identity.strip()
+                for identity in self.app.settings.get("iris.agents", str).split(",")
+                if identity.strip()
+            ]
+            if wanted:
+                agents = {
+                    identity: agent
+                    for identity, agent in agents.items()
+                    if identity in wanted
+                }
+            self._agents = agents
         except Exception as error:
             self.notify(
                 f"Failed to read agents data ({error})",

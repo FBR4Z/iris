@@ -141,9 +141,9 @@ class MainScreen(Screen, can_focus=False):
         with containers.Center():
             yield SideBar(
                 SideBar.Panel("Íris", IrisOrb()),
-                SideBar.Panel("Plan", Plan([])),
+                SideBar.Panel("Plano", Plan([])),
                 SideBar.Panel(
-                    "Project",
+                    "Projeto",
                     ProjectDirectoryTree(
                         self.project_path,
                         id="project_directory_tree",

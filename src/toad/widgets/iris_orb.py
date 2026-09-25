@@ -49,12 +49,19 @@ class IrisOrb(Widget):
     def __init__(
         self,
         show_label: bool = True,
+        accent_borders: bool = True,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
     ) -> None:
         super().__init__(name=name, id=id, classes=classes)
         self.show_label = show_label
+        self.accent_borders = accent_borders
+        """Tint the prompt and sidebar borders with the mode color."""
+        self._state: tuple[bool, bool, bool, str] = (False, False, True, "")
+        self._intensity = 1.0
+        self._elapsed = 0.0
+        self._applied_accent: tuple[str, bool] | None = None
         self._start = monotonic()
         self._last_frame = self._start
         # Integrated rotation angle, so speed changes don't make the ring jump.
@@ -64,7 +71,8 @@ class IrisOrb(Widget):
         """0 = idle, 1 = busy; eased so transitions are smooth."""
 
     def on_mount(self) -> None:
-        self.set_interval(1 / self.FPS, self.refresh)
+        # Tick even when hidden (e.g. sidebar closed) so the accent borders keep up.
+        self.set_interval(1 / self.FPS, self._tick)
 
     def _setting(self, key: str, default: str) -> str:
         try:
@@ -106,13 +114,14 @@ class IrisOrb(Widget):
             mode_name,
         )
 
-    def render(self) -> RenderResult:
+    def _tick(self) -> None:
+        """Advance the animation state."""
         now = monotonic()
-        elapsed = now - self._start
+        elapsed = self._elapsed = now - self._start
         delta = min(now - self._last_frame, 0.25)
         self._last_frame = now
 
-        connected, busy, planning, mode_name = self._read_state()
+        self._state = connected, busy, planning, _mode_name = self._read_state()
 
         target = (
             self._parse_color("iris.plan_color", DEFAULT_PLAN_COLOR)
@@ -133,7 +142,37 @@ class IrisOrb(Widget):
         intensity += (1.0 - intensity) * self._activity
         if not connected:
             intensity = 0.35 + 0.15 * breath
+        self._intensity = intensity
 
+        self._apply_accent()
+        if self.display:
+            self.refresh()
+
+    def _apply_accent(self) -> None:
+        if not self.accent_borders or self._conversation() is None:
+            return
+        screen = self.screen
+        prompt_container = screen.query_one_optional("PromptContainer")
+        focused = prompt_container is not None and prompt_container.has_focus_within
+        key = (self._color.hex, focused)
+        if key == self._applied_accent:
+            return
+        self._applied_accent = key
+        background = screen.styles.background
+        if prompt_container is not None:
+            prompt_color = (
+                self._color if focused else background.blend(self._color, 0.35)
+            )
+            prompt_container.styles.border = ("tall", prompt_color)
+        if (side_bar := screen.query_one_optional("SideBar")) is not None:
+            side_bar.styles.border_right = (
+                "tall",
+                background.blend(self._color, 0.45),
+            )
+
+    def render(self) -> RenderResult:
+        connected, busy, planning, mode_name = self._state
+        elapsed, intensity = self._elapsed, self._intensity
         width = self.size.width
         label_lines = self.LABEL_LINES if self.show_label else 0
         rows = max(self.size.height - label_lines, 1)

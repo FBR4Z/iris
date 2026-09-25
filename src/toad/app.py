@@ -635,6 +635,11 @@ class ToadApp(App, inherit_bindings=False):
             )
             self.notify(f"Wrote default settings to {settings_path}", title="Settings")
         self.ansi_theme_dark = DRACULA_TERMINAL_THEME
+        from toad.iris_theme import IRIS_THEME
+        from toad import iris_i18n
+
+        self.register_theme(IRIS_THEME)
+        iris_i18n.install()
         self._settings = settings
         self.settings.set_all()
 
