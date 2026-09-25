@@ -770,6 +770,13 @@ class ToadApp(App, inherit_bindings=False):
         # which will update the setting the user is editing.
         self.set_timer(0.05, save_settings_and_exit)
 
+    def _handle_exception(self, error: Exception) -> None:
+        # Íris: keep a record, since the traceback is easy to miss when the app exits.
+        from toad.iris_crash import log_exception
+
+        log_exception(error)
+        super()._handle_exception(error)
+
     def action_iris_listen(self) -> None:
         """Dictate into the current conversation's prompt (F9 again cancels)."""
         from toad.widgets.conversation import Conversation

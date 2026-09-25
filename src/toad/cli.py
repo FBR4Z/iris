@@ -84,6 +84,9 @@ class DefaultCommandGroup(click.Group):
 @click.pass_context
 def main(ctx, version):
     """Íris — Claude, Codex e Gemini no seu terminal."""
+    from toad.iris_crash import install_fault_handler
+
+    install_fault_handler()
     if version:
         from toad import get_version
 

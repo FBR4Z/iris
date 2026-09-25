@@ -280,12 +280,19 @@ class IrisVoice:
                 return
             await self.stop()
         self._config = tuple(command)
+        from toad import paths
+
+        try:
+            # Keep the service's own errors (CUDA, microphone...) for diagnosis.
+            stderr_log = (paths.get_state() / "iris-voz.log").open("ab")
+        except OSError:
+            stderr_log = asyncio.subprocess.DEVNULL
         try:
             self._process = await asyncio.create_subprocess_exec(
                 *command,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=stderr_log,
             )
         except (OSError, ValueError) as error:
             self._process = None
@@ -296,6 +303,9 @@ class IrisVoice:
                 severity="error",
             )
             return
+        finally:
+            if stderr_log is not asyncio.subprocess.DEVNULL:
+                stderr_log.close()  # the child has its own handle now
         self._reader = asyncio.create_task(self._read_events(self._process))
 
     async def stop(self) -> None:
