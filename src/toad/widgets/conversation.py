@@ -1320,6 +1320,8 @@ class Conversation(containers.Vertical):
 
     def _build_slash_commands(self) -> list[SlashCommand]:
         slash_commands = [
+            SlashCommand("/fechar", "Fechar esta sessão"),
+            SlashCommand("/sair", "Sair da Íris"),
             SlashCommand("/toad:about", "About Toad"),
             SlashCommand(
                 "/toad:clear",
@@ -1868,6 +1870,12 @@ class Conversation(containers.Vertical):
                 be forwarded to the agent.
         """
         command, _, parameters = text[1:].partition(" ")
+        # Íris aliases
+        if command == "fechar":
+            command = "toad:session-close"
+        elif command == "sair":
+            await self.app.action_quit()
+            return True
         if command == "toad:about":
             from toad import about
             from toad.widgets.markdown_note import MarkdownNote
