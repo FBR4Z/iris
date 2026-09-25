@@ -373,4 +373,33 @@ SCHEMA: list[SchemaDict] = [
             },
         ],
     },
+    {
+        "key": "iris",
+        "title": "Íris",
+        "help": "Aparência do círculo da Íris.",
+        "type": "object",
+        "fields": [
+            {
+                "key": "plan_color",
+                "title": "Cor do planejamento",
+                "help": "Cor do círculo em modos de planejamento (ex.: #29c7ff, cyan, rgb(41,199,255)).",
+                "type": "string",
+                "default": "#29c7ff",
+            },
+            {
+                "key": "exec_color",
+                "title": "Cor da execução",
+                "help": "Cor do círculo nos demais modos (ex.: #ff8a1f, orange).",
+                "type": "string",
+                "default": "#ff8a1f",
+            },
+            {
+                "key": "plan_modes",
+                "title": "Modos de planejamento",
+                "help": "Palavras, separadas por vírgula, que identificam um modo de planejamento pelo id ou nome do modo do agente.",
+                "type": "string",
+                "default": "plan, read-only",
+            },
+        ],
+    },
 ]

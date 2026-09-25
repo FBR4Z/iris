@@ -26,6 +26,7 @@ from toad.widgets.throbber import Throbber
 from toad.widgets.conversation import Conversation
 from toad.widgets.project_directory_tree import ProjectDirectoryTree
 from toad.widgets.side_bar import SideBar
+from toad.widgets.iris_orb import IrisOrb
 
 
 class ModeProvider(Provider):
@@ -139,6 +140,7 @@ class MainScreen(Screen, can_focus=False):
     def compose(self) -> ComposeResult:
         with containers.Center():
             yield SideBar(
+                SideBar.Panel("Íris", IrisOrb()),
                 SideBar.Panel("Plan", Plan([])),
                 SideBar.Panel(
                     "Project",
