@@ -249,6 +249,7 @@ class ToadApp(App, inherit_bindings=False):
         ),
         Binding("ctrl+c", "help_quit", show=False, system=True),
         Binding("ctrl+s", "sessions", "Sessions"),
+        Binding("f9", "iris_listen", "Falar", priority=True),
         Binding("f1", "toggle_help_panel", "Help", priority=True),
         Binding(
             "f2,ctrl+comma",
@@ -591,6 +592,8 @@ class ToadApp(App, inherit_bindings=False):
                 self.settings.up_to_date()
 
     def setting_updated(self, key: str, value: object) -> None:
+        if key.startswith("voz.") and hasattr(self, "iris_voice"):
+            self.call_later(self.iris_voice.sync)
         if key == "ui.column":
             if isinstance(value, bool):
                 self.column = value
@@ -640,6 +643,10 @@ class ToadApp(App, inherit_bindings=False):
 
         self.register_theme(IRIS_THEME)
         iris_i18n.install()
+
+        from toad.iris_voice import IrisVoice
+
+        self.iris_voice = IrisVoice(self)
         self._settings = settings
         self.settings.set_all()
 
@@ -670,6 +677,7 @@ class ToadApp(App, inherit_bindings=False):
         self.update_terminal_title()
         self.set_timer(1, self.run_version_check)
         self.set_process_title()
+        self.call_later(self.iris_voice.sync)
         self.update_show_sessions()
 
     @work(thread=True, exit_on_error=False)
@@ -749,6 +757,9 @@ class ToadApp(App, inherit_bindings=False):
         """An [action](/guide/actions) to quit the app as soon as possible."""
 
         self.screen.set_focus(None)
+        if hasattr(self, "iris_voice"):
+            await self.iris_voice.farewell()
+            await self.iris_voice.stop()
 
         async def save_settings_and_exit():
             await self.save_settings()
@@ -758,6 +769,20 @@ class ToadApp(App, inherit_bindings=False):
         # If the user presses ctrl+q while on the settings page, we want to make sure the blur event is handled,
         # which will update the setting the user is editing.
         self.set_timer(0.05, save_settings_and_exit)
+
+    def action_iris_listen(self) -> None:
+        """Dictate into the current conversation's prompt (F9 again cancels)."""
+        from toad.widgets.conversation import Conversation
+
+        conversation = self.screen.query_one_optional(Conversation)
+        if conversation is None:
+            self.notify("Abra uma conversa para usar o ditado.", title="Voz")
+            return
+        try:
+            names = sorted(path.name for path in conversation.project_path.iterdir())[:40]
+        except OSError:
+            names = []
+        self.iris_voice.toggle_listen(conversation, hint=", ".join(names))
 
     def action_help_quit(self) -> None:
         if (time := monotonic()) - self.last_ctrl_c_time <= 5.0:

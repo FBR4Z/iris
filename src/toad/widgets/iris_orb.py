@@ -26,6 +26,7 @@ DEFAULT_PLAN_COLOR = "#29c7ff"
 DEFAULT_EXEC_COLOR = "#ff8a1f"
 DEFAULT_ATTENTION_COLOR = "#ffd23f"
 DEFAULT_ERROR_COLOR = "#ff4d5e"
+DEFAULT_LISTEN_COLOR = "#bff3ff"
 DEFAULT_PLAN_MODES = "plan, read-only"
 DEFAULT_AGENT_COLORS = "claude=#d97757, codex=#10a37f, openai=#10a37f, gemini=#7b8cff"
 
@@ -46,6 +47,11 @@ class OrbState:
     mode_name: str = ""
     agent_key: str = ""
     """Lowercased identity + name of the agent, used to pick its color."""
+    listening: bool = False
+    transcribing: bool = False
+    speaking: bool = False
+    level: float = 0.0
+    """Microphone or speech loudness, 0..1."""
 
 
 def ease_out(value: float) -> float:
@@ -99,6 +105,7 @@ class IrisOrb(Widget):
         self._state = OrbState()
         self._ripple_start: float | None = None
         self._turn_done_at: float | None = None
+        self._voice_level = 0.0
         self._applied_accent: tuple[str, bool] | None = None
         self._booted = False
         """Set on the first tick, so the power-up plays once the app is responsive."""
@@ -126,10 +133,19 @@ class IrisOrb(Widget):
         return self.screen.query_one_optional(Conversation)
 
     def _read_state(self) -> OrbState:
+        voice = getattr(self.app, "iris_voice", None)
+        voice_state = {}
+        if voice is not None:
+            voice_state = {
+                "listening": voice.listening,
+                "transcribing": voice.transcribing,
+                "speaking": voice.speaking,
+                "level": voice.level,
+            }
         conversation = self._conversation()
         if conversation is None:
             # Outside a conversation (e.g. the launcher): just idle.
-            return OrbState(connected=True)
+            return OrbState(connected=True, **voice_state)
         mode = conversation.current_mode
         plan_words = [
             word.strip().lower()
@@ -151,6 +167,7 @@ class IrisOrb(Widget):
             failed=bool(getattr(conversation, "_agent_fail", False)),
             mode_name=mode.name if mode is not None else "",
             agent_key=agent_key.lower(),
+            **voice_state,
         )
 
     def _agent_target(self, state: OrbState, fallback: Color) -> Color:
@@ -180,7 +197,9 @@ class IrisOrb(Widget):
         if previous.busy and not state.busy and not state.failed:
             self._ripple_start = self._turn_done_at = elapsed
 
-        if state.failed:
+        if state.listening:
+            target = Color.parse(DEFAULT_LISTEN_COLOR)
+        elif state.failed:
             target = self._parse_color("iris.error_color", DEFAULT_ERROR_COLOR)
         elif state.asking:
             target = self._parse_color("iris.attention_color", DEFAULT_ATTENTION_COLOR)
@@ -210,6 +229,10 @@ class IrisOrb(Widget):
         if state.asking or state.failed:
             # Faster, deeper pulse to grab attention.
             intensity = 0.45 + 0.55 * (0.5 + 0.5 * math.sin(elapsed * 6))
+        if state.listening or state.speaking:
+            intensity = max(intensity, 0.55 + 0.45 * state.level)
+        # Smooth the voice level so the ring "breathes" with the sound.
+        self._voice_level += (state.level - self._voice_level) * min(delta * 18, 1.0)
         self._intensity = intensity
 
         self._apply_accent()
@@ -269,6 +292,10 @@ class IrisOrb(Widget):
         center_x, center_y = dots_w / 2, dots_h / 2
         radius = min(dots_w, dots_h) / 2 - 1
         head = self._angle
+        voice_level = self._voice_level
+        if self._state.listening:
+            # The ring swells with your voice.
+            radius *= 0.9 + 0.1 * voice_level
 
         # Outer ring with a bright comet; while booting it sweeps in from the top.
         samples = int(TAU * radius * 2)
@@ -303,6 +330,9 @@ class IrisOrb(Widget):
 
         # Pulsing core, growing in as the orb boots.
         core = radius * (0.24 + 0.04 * math.sin(elapsed * 3.4)) * boot
+        if self._state.speaking:
+            # The core pulses with Íris' own voice.
+            core *= 1 + 0.7 * voice_level
         core_int = int(core) + 1
         for dy in range(-core_int, core_int + 1):
             for dx in range(-core_int, core_int + 1):
@@ -350,6 +380,10 @@ class IrisOrb(Widget):
         )
         if self._elapsed < BOOT_SECONDS:
             phase, status = "iniciando", "…"
+        elif state.listening:
+            phase, status = "ouvindo", "fale agora"
+        elif state.transcribing:
+            phase, status = "transcrevendo", "…"
         elif state.failed:
             phase, status = "erro", "veja a conversa"
         elif not state.connected:
@@ -358,7 +392,9 @@ class IrisOrb(Widget):
             phase, status = "aguardando você", "permissão"
         else:
             phase = "planejamento" if state.planning else "execução"
-            if state.busy:
+            if state.speaking:
+                status = "falando"
+            elif state.busy:
                 status = "trabalhando…"
             elif just_done:
                 status = "concluído ✓"

@@ -712,6 +712,8 @@ class Conversation(containers.Vertical):
     @on(AgentReady)
     async def on_agent_ready(self) -> None:
         self.session_start_time = monotonic()
+        if (voice := self._iris_voice()) is not None:
+            voice.announce("conectado", agente=self.agent_title or "")
         if self.agent is not None:
             content = Content.assemble(self.agent.get_info(), " connected")
             self.flash(content, style="success")
@@ -743,6 +745,8 @@ class Conversation(containers.Vertical):
     @on(AgentFail)
     async def on_agent_fail(self, message: AgentFail) -> None:
         self.agent_ready = True
+        if (voice := self._iris_voice()) is not None:
+            voice.announce("falha", agente=self.agent_title or "")
         self._agent_fail = True
         self.notify(message.message, title="Agent failure", severity="error", timeout=5)
 
@@ -807,6 +811,9 @@ class Conversation(containers.Vertical):
                 await self.post_shell(event.body)
             self.window.scroll_end(animate=False)
         elif text := event.body.strip():
+            self._iris_turn_started = monotonic()
+            if (voice := self._iris_voice()) is not None and not text.startswith("/"):
+                voice.announce("trabalhando")
             await self.prompt_history.append(event.body)
             self.prompt_history_index = 0
             if text.startswith("/") and await self.slash_command(text):
@@ -850,6 +857,19 @@ class Conversation(containers.Vertical):
             stop_reason: The stop reason returned from the Agent, or `None`.
         """
         self.turn = "client"
+        if (voice := self._iris_voice()) is not None:
+            if stop_reason == "end_turn":
+                response = (
+                    self._agent_response.source if self._agent_response is not None else ""
+                )
+                started = getattr(self, "_iris_turn_started", None)
+                voice.turn_over(
+                    self.agent_title or "",
+                    response,
+                    monotonic() - started if started is not None else 0.0,
+                )
+            elif stop_reason in ("max_tokens", "max_turn_requests", "refusal"):
+                voice.announce("erro")
         if self._agent_thought is not None and self._agent_thought.loading:
             await self._agent_thought.remove()
         if self._loading is not None:
@@ -977,6 +997,12 @@ class Conversation(containers.Vertical):
             for entry in message.entries
         ]
 
+        if (voice := self._iris_voice()) is not None and len(entries) != getattr(
+            self, "_iris_plan_size", 0
+        ):
+            self._iris_plan_size = len(entries)
+            voice.announce("plano", etapas=str(len(entries)))
+
         if self.contents.children and isinstance(
             (current_plan := self.contents.children[-1]), Plan
         ):
@@ -992,6 +1018,10 @@ class Conversation(containers.Vertical):
         from toad.widgets.tool_call import ToolCall
 
         tool_call = message.tool_call
+        if isinstance(message, acp_messages.ToolCall) and (
+            voice := self._iris_voice()
+        ) is not None:
+            voice.announce_tool(dict(tool_call))
 
         if tool_call.get("status", None) in (None, "completed"):
             self._agent_thought = None
@@ -1191,6 +1221,8 @@ class Conversation(containers.Vertical):
     ) -> None:
         kind = tool_call_update.get("kind", None)
         title = tool_call_update.get("title", "") or ""
+        if (voice := self._iris_voice()) is not None:
+            voice.announce("permissao")
 
         contents = tool_call_update.get("content", []) or []
         # If all the content is diffs, we will set kind to "edit" to show the permisisons screen
@@ -1858,6 +1890,22 @@ class Conversation(containers.Vertical):
             self.cursor.follow(None)
             self.prompt.focus()
         self.refresh_bindings()
+
+    def _iris_voice(self):
+        """The Íris voice service, if running."""
+        return getattr(self.app, "iris_voice", None)
+
+    def watch_current_mode(self, old_mode: Mode | None, new_mode: Mode | None) -> None:
+        if old_mode is None or new_mode is None or old_mode.id == new_mode.id:
+            return
+        if (voice := self._iris_voice()) is not None:
+            from toad.iris_voice import is_planning_mode
+
+            planning = is_planning_mode(self.app, new_mode)
+            voice.announce(
+                "modo_planejamento" if planning else "modo_execucao",
+                modo=new_mode.name,
+            )
 
     async def slash_command(self, text: str) -> bool:
         """Give Toad the opertunity to process slash commands.
