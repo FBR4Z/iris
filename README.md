@@ -170,6 +170,14 @@ Arquivos principais do fork:
 | `voz/src/iris_voz/server.py` | serviço de voz |
 | `tools/fake_agent.py` | agente ACP falso para testes (não gasta cota) |
 
+## Testes
+
+```powershell
+uv run pytest
+```
+
+São ~30 testes (funções da voz, círculo, bordas, tela inicial, tradução, sessões, avisos falados) que rodam a Íris sem tela, com o agente falso — não gastam cota nem tocam nas suas configurações. Rodam também no GitHub Actions (Windows e Linux) a cada envio. Vale rodar depois de puxar atualizações do Toad.
+
 ## Solução de problemas
 
 - **A Íris fechou sozinha** — veja `%USERPROFILE%\.local\state\toad\crash.log`.

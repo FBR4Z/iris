@@ -48,4 +48,9 @@ build-backend = "hatchling.build"
 packages = ["src/toad"]
 
 [dependency-groups]
-dev = ["mypy>=1.19.1", "pyinstrument>=5.1.1", "textual-dev>=1.8.0"]
+dev = ["mypy>=1.19.1", "pyinstrument>=5.1.1", "textual-dev>=1.8.0", "pytest>=8", "pytest-asyncio>=1.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
