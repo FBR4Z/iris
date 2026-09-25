@@ -1,0 +1,34 @@
+[project]
+name = "iris-voz"
+version = "0.1.0"
+description = "Serviço de voz local da Íris: fala (Kokoro/Piper) e escuta (Whisper), offline."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "kokoro-onnx>=0.6.1",
+    "numpy",
+    "piper-tts>=1.8.0",
+    "sounddevice>=0.5.6",
+    "soundfile>=0.14.0",
+    # GPU (CUDA 12). Without an NVIDIA GPU everything falls back to the CPU.
+    "onnxruntime-gpu<1.24",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "nvidia-cuda-runtime-cu12>=12.9.79",
+    "nvidia-cudnn-cu12>=9,<10",
+    "nvidia-cufft-cu12>=11.4.1.4",
+    "nvidia-curand-cu12>=10.3.10.19",
+]
+
+[project.scripts]
+iris-voz = "iris_voz.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/iris_voz"]
+
+[tool.uv]
+# Use the CUDA build of onnxruntime instead of the CPU one pulled in by kokoro/piper.
+override-dependencies = ["onnxruntime ; sys_platform == 'never'"]

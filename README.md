@@ -1,337 +1,200 @@
-# Toad
+# ◉ Íris
 
-A unified interface for AI in your terminal ([release announcement](https://willmcgugan.github.io/toad-released/)).
+**Claude, Codex e Gemini numa interface só, no seu terminal — com um círculo animado estilo Jarvis e voz 100% local.**
 
-<table>
-
-  <tbody>
-
-  <tr>
-    <td><img alt="Screenshot 2026-01-30 at 19 23 54" src="https://github.com/user-attachments/assets/aca51988-359a-466d-bdd1-050dc3d678ac" /></td> 
-    <td><img alt="Screenshot 2026-01-30 at 19 21 00" src="https://github.com/user-attachments/assets/b9b0a6bb-e084-4976-86c2-cccdb42041ae" /></td>    
-  </tr>
-
-  <tr>
-    <td><img alt="Screenshot 2026-01-30 at 19 29 47" src="https://github.com/user-attachments/assets/3fe4060f-d468-4635-b80f-03c24625c6c0" /></td>
-    <td><img alt="Screenshot 2026-01-30 at 19 30 08" src="https://github.com/user-attachments/assets/03659d64-02fc-4936-a90d-e202bc4b70a1" /></td>
-  </tr>
-    
-  </tbody>
-  
-</table>
-
-## Quickstart
-
-Install:
+A Íris é um fork do [Toad](https://github.com/batrachianai/toad), de Will McGugan, adaptado para Windows, traduzido para português e com identidade visual própria. Ela não é um modelo nem um agente: é a casca que abre os CLIs oficiais (`claude`, `codex`, `gemini`) pelo protocolo [ACP](https://agentclientprotocol.com). Por isso **usa as suas assinaturas e logins normais, sem API key**.
 
 ```
-curl -fsSL batrachian.ai/install | sh
+┌─ Íris ─────────────────┐┌─────────────────────────────────────────────┐
+│       ⣀⠤⠖⠒⠒⠒⠒⠒⠤⣀       ││ você: por que o get_user retorna nulo?       │
+│     ⡠⠚⠁  ⠰⠒⠒⠂  ⠈⠑⢄     ││                                             │
+│    ⡜⠁⢀⠆        ⠲⡀⠈⢣    ││ claude: O problema está em main.py:42 ...    │
+│   ⢸  ⠏   ⢀⣤⣤⣄   ⠹ ⠈⡇   ││                                             │
+│   ⢸      ⣿⣿⣿⣿⡇     ⡧   ││                                             │
+│   ⢸  ⣄   ⠙⠿⠿⠟⠁  ⣰ ⢀⡇   ││                                             │
+│    ⢣⡀⠈⠦        ⠐⠁⢀⡜    ││                                             │
+│     ⠑⢤⡀  ⠠⠤⠤⠖  ⢀⡠⠊     ││                                             │
+│       ⠉⠒⠦⠤⠤⠤⠤⠤⠒⠉       ││                                             │
+│  PLANEJAMENTO · pronto  │├─────────────────────────────────────────────┤
+├─ Projeto ──────────────┤│ > Como posso ajudar hoje?                    │
+│ ▾ src                  │└─────────────────────────────────────────────┘
+└────────────────────────┘ F9 Falar  ^O Modos  ^B Barra lateral  ^H Início
 ```
 
-Run:
+## O que ela tem
 
-```
-toad
-```
+- **Três agentes, um lugar** — Claude Code, Codex CLI e Gemini CLI, cada um numa aba de sessão.
+- **Círculo animado** que mostra o estado do agente:
+  - anel externo **azul** no planejamento e **laranja** na execução (a borda do prompt e da barra lateral acompanham);
+  - anel interno na **cor do agente** (Claude terracota, Codex verde, Gemini azul-violeta);
+  - respira parado, gira rápido trabalhando, pulsa **amarelo** pedindo permissão e **vermelho** em erro;
+  - solta uma **onda** ao concluir um turno e "liga" com animação ao abrir.
+- **Voz local e independente do modelo** (opcional) — avisos falados, ditado com F9 e leitura de respostas. Nada sai da sua máquina.
+- **Árvore de arquivos** da pasta atual, **plano** do agente e **histórico de sessões**.
+- **Tema Íris** (azul-marinho, ciano e laranja), interface em **português** e coleta de dados **desligada**.
+- **Windows nativo** (o Toad original só roda em Linux/macOS).
 
-See [Getting Started](#getting-started) if you have any problems.
+## Instalação (Windows)
 
-## What is Toad?
+Pré-requisitos: [uv](https://docs.astral.sh/uv/) e [Node.js](https://nodejs.org).
 
-Toad is an interface to coding agents, such as Claude, Gemini, Codex, OpenHand, and many more. 
+```powershell
+# 1. uv (se ainda não tiver)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-Toad blends a traditional shell based workflow and powerful agentic AI, with an intuitive Terminal User Interface.
-
-<table>
-  <tbody>
-    <tr>
-      <td>
-        <h3>AI "App store"</h3>
-        <p>
-        Find, install, and run dozens of agents directly from the Toad UI.
-        <p>
-        There is a large and growing list of AI agents that work with Toad.
-        Discover agents from big tech and smaller Open Source projects.
-        <p>
-        Developers can add support for their own agents, via the <a href="https://agentclientprotocol.com/overview/introduction">Agent Client Protocol</a>.
-      </td>
-      <td>
-        <img alt="Screenshot 2026-01-27 at 12 48 30" src="https://github.com/user-attachments/assets/f7bd3776-6405-47e5-9d1f-11a12a4ce3b2" />
-      </td>
-    </tr>
-    <tr>
-      <td>
-      <h3>Toad Shell</h3>
-      <p>
-      While most terminal agent interfaces can run commands (with the <kbd>!</kbd> syntax), they aren't running a shell.
-      If you change directory or set environment variables, they won't persist from one command to the next.
-      <p>
-      Output that contains more than simple text will typically be garbled, and anything interactive will fail or even break the TUI entirely.
-      <p>
-      Toad integrates a fully working shell with full-color output, interactive commands, and tab completion.
-      Allowing you to interleave prompts for the agent with terminal workflows.
-      <p>
-      At time of writing Toad is the only terminal UI which does this.
-      </td>
-      <td><img src="https://github.com/user-attachments/assets/ac9247bb-3daa-4bb7-b3fd-e0bbd22475fa"/></td>        
-    </tr>
-    <tr>
-      <td>
-        <h3>Prompt Editor</h3>
-        <p>
-        Toad has a nice Markdown prompt editor, with syntax highlighting for code fences.
-        Full mouse support, cut and paste, many keybindings and shortcuts.
-      </td>
-      <td>
-        <img src="https://github.com/user-attachments/assets/3d619b94-ec53-4e7a-b905-5aef6f4fa8a6"/>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <h3>File Picker</h3>
-        <p>
-        Add a file to your prompt with <kbd>@</kbd>, and toad will show a fuzzy file picker.
-        <p>
-        Type a few characters from the filename or folder and Toad will refine the search as you type.
-        Hit <kbd>enter</kbd> to add the file to the prompt.
-        <p>
-        The fuzzy picker is great when you know the file you want to mention.
-        If you want to explore your files, you can press <kbd>tab</kbd> to switch to an interactive tree control.                
-      </td>
-      <td>
-        <img src="https://github.com/user-attachments/assets/ab25c389-1d2f-4006-a1d8-159edbd3ed00"/>        
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <h3>Beautiful Diffs</h3>
-        <p>
-        Side-by-side or unified diffs, with syntax highlighting for most languages.      
-      </td>
-      <td>
-        <img alt="Screenshot 2026-01-27 at 12 44 22" src="https://github.com/user-attachments/assets/b3d6c29c-d6ec-4253-a9dc-2df0ff21e293" />
-      </td>      
-    </tr>
-    <tr>
-      <td>
-        <h3>Elegant Markdown</h3>
-        <p>
-        Markdown is the language of LLMs (AI).
-        Toad's streaming Markdown support can display syntax highlighted code fences, elegant tables, quotes, lists, and more.
-      </td>
-      <td>
-        <img src="https://github.com/user-attachments/assets/b650b407-f4ab-4cb9-8920-55c15073598e"/>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <h3>Simple Settings</h3>
-        <p>
-        An intuitive settings system (no need to manually edit JSON files).
-        <p>
-        Tune Toad to your liking.
-        Almost everything in Toad may be tweaked.
-        If you want to create an ultra-minimal UI with nothing more than a prompt—you can!                
-      </td>
-      <td>
-        <img src="https://github.com/user-attachments/assets/2ff0de12-c2e1-455b-954a-21e66c070dd8"/>      
-      </td>    
-    </tr>
-    <tr>
-      <td>
-        <h3>Concurrent sessions</h3>
-        <p>
-        Launch and run multiple agents from potentially different providers.
-        <p>
-        Hit <kbd>ctrl+s</kbd> to show the current state of all your agents in one screen.
-        </p>        
-      </td> 
-      <td>
-        <img  alt="Screenshot 2026-02-16 at 17 33 40-fs8" src="https://github.com/user-attachments/assets/cd3128eb-b348-4f40-b5c0-4816d07dcbe9" />
-      </td>    
-    </tr>
-    <tr>
-      <td>
-        <h3>Session Resume</h3>
-        <p>
-        Resume previous sessions with your agent.    
-        <p>
-        Hit <kbd>ctrl+r</kbd> to pick a previous session to resume.
-      </td>
-      <td>
-        <img alt="Screenshot 2026-02-01 at 16 57 46" src="https://github.com/user-attachments/assets/7c1ad59e-027c-4542-a216-9a32ef573936" />
-      </td>    
-    </tr>    
-  </tbody>
-</table>
-
-## Video
-
-Watch a preview of the Toad User Interface:
-
-https://github.com/user-attachments/assets/ced36f4b-db02-4d29-8a0a-14ec64b22881
-
-
-## Compatibility
-
-Toad runs on Linux and macOS. Native Windows support is currently lacking (but on the roadmap), but Toad will run quite well with WSL.
-
-Toad is a terminal application.
-Any terminal will work, although if you are using the default terminal on macOS you will get a much reduced experience.
-I recommend [Ghostty](https://ghostty.org/) which is fully featured and has amazing performance.
-
-### Clipboard
-
-On Linux, you may need to install `xclip` to enable clipboard support.
-
-```
-sudo apt install xclip
+# 2. Íris
+git clone https://github.com/FBR4Z/iris.git
+cd iris
+uv tool install --editable .
+uv tool update-shell        # coloca o comando `iris` no PATH (reabra o terminal)
 ```
 
-## Getting Started
+### Agentes
 
-The easiest way to install Toad is by pasting the following in to your terminal:
+Instale e faça login nos que você usa:
 
-```bash
-curl -fsSL batrachian.ai/install | sh
+| Agente | Instalar | Adaptador ACP |
+|---|---|---|
+| Claude Code | `irm https://claude.ai/install.ps1 \| iex` e rode `claude` uma vez para logar | `npm install -g @agentclientprotocol/claude-agent-acp` |
+| Codex CLI | `npm install -g @openai/codex` e rode `codex` para logar | usa `npx @zed-industries/codex-acp` (automático) |
+| Gemini CLI | `npm install -g @google/gemini-cli` e rode `gemini` para logar | embutido (`gemini --acp`) |
+
+> O Gemini CLI para contas pessoais (free, AI Pro, Ultra) foi aposentado pelo Google em 18/06/2026. Continua funcionando com licenças **Gemini Code Assist Standard/Enterprise**, Google Cloud / Vertex AI ou API key paga.
+
+### Voz (opcional)
+
+A voz roda num serviço separado, `iris-voz` (Python 3.13, por causa das bibliotecas de GPU):
+
+```powershell
+uv tool install --editable voz --python 3.13 --excludes voz/excludes.txt
 ```
 
-You should now have `toad` installed.
+Na primeira execução ela baixa os modelos (~0,4 GB de voz em `%LOCALAPPDATA%\iris-voz\models`, mais o Whisper, ~1,6 GB). Depois ative em **Configurações → Voz**.
 
-If that doesn't work for any reason, then you can install with the following steps:
+## Uso
 
-First [install UV](https://docs.astral.sh/uv/getting-started/installation/):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+```powershell
+cd C:\caminho\do\projeto
+iris                                  # tela inicial: escolha o agente (1, 2, 3)
+iris acp "claude-agent-acp"           # abre direto no Claude
+iris acp "gemini --acp"               # abre direto no Gemini
 ```
 
-Then use UV to install toad:
+A pasta onde você abre a Íris é o projeto que o agente enxerga.
 
-```bash
-uv tool install -U batrachian-toad --python 3.14
+### Atalhos
+
+| Tecla | Ação |
+|---|---|
+| **F9** | Falar (ditado) / cancelar |
+| **Ctrl+O** | Trocar o modo do agente (ex.: planejamento) |
+| **Ctrl+B** | Barra lateral |
+| **Ctrl+H** | Início (abrir outro agente em nova aba) |
+| **Ctrl+[ / Ctrl+]** | Sessão anterior / próxima |
+| **Ctrl+S** | Lista de sessões |
+| **F1** | Ajuda |
+| **Ctrl+Q** | Sair |
+
+### Comandos
+
+| Comando | Ação |
+|---|---|
+| `/fechar` | Fecha a sessão atual |
+| `/sair` | Sai da Íris |
+| `/toad:rename <nome>` | Renomeia a sessão |
+| `/toad:session-new` | Nova sessão na mesma pasta |
+
+## Voz
+
+Em **Configurações → Voz → Modo**:
+
+| Modo | Avisos | Ditado (F9) | Lê respostas | Peso |
+|---|:-:|:-:|:-:|---|
+| Desligada | – | – | – | nenhum |
+| Só avisos | ✅ | – | – | leve (frases em cache) |
+| Só ditado | – | ✅ | – | Whisper |
+| Ditado + avisos | ✅ | ✅ | – | ambos |
+| Completa | ✅ | ✅ | ✅ | ambos |
+
+**Avisos** são frases curtas em momentos definidos, editáveis em *Frases por evento* (`evento = frase`, vazio silencia):
+
+| Evento | Quando | Padrão |
+|---|---|---|
+| `saudacao` | ao abrir | "Bom dia, {nome}." |
+| `conectado` / `falha` | agente conectou / falhou | "{agente} conectado." |
+| `modo_planejamento` / `modo_execucao` | troca de modo | "Modo de planejamento." |
+| `executando` | agente roda um comando | "Executando PowerShell." (git, npm, Python, dotnet…) |
+| `editando` / `apagando` / `movendo` | agente mexe num arquivo | "Editando main.py." |
+| `web` | agente acessa a internet | "Acessando a web." |
+| `permissao` | agente pede permissão | "Preciso da sua permissão." |
+| `concluido` | terminou (após N segundos) | "Pronto. Terminei em 1 minuto." |
+| `erro` / `tchau` | recusa ou limite / ao sair | "Algo deu errado." / "Até logo." |
+| `trabalhando`, `lendo`, `pesquisando`, `plano` | — | silenciados por padrão |
+
+**Motores:** fala com [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (natural, ideal com GPU; vozes Dora, Alex, Santa) ou [Piper](https://github.com/OHF-Voice/piper1-gpl) (leve, processador); escuta com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (`large-v3-turbo` na GPU, `small` no processador). O modo *Automático* escolhe conforme a máquina.
+
+Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; geração de fala ~7× mais rápida que o tempo real.
+
+## Configurações próprias da Íris
+
+Além das do Toad, em **Configurações**:
+
+- **Íris** — cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; agentes mostrados na tela inicial.
+- **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, só CPU, envio automático do ditado.
+
+O arquivo fica em `%USERPROFILE%\.config\toad\toad.json`.
+
+## Como funciona
+
+```
+ você ──▶ Íris (Textual, Python 3.14)
+            │  ACP (JSON-RPC via stdin/stdout)
+            ├──▶ claude-agent-acp ──▶ Claude Code ──▶ sua assinatura Claude
+            ├──▶ codex-acp ─────────▶ Codex CLI ────▶ sua assinatura ChatGPT
+            ├──▶ gemini --acp ──────▶ Gemini CLI ───▶ sua licença Google
+            │
+            └──▶ iris-voz (Python 3.13, processo separado)
+                   ├─ Kokoro / Piper  (texto → voz)
+                   └─ faster-whisper  (voz → texto)
 ```
 
-Toad is also available on [conda-forge](https://conda-forge.org), and can be installed using [pixi](https://pixi.prefix.dev/latest/#installation):
+Arquivos principais do fork:
 
-```bash
-pixi global install batrachian-toad
+| Arquivo | O quê |
+|---|---|
+| `src/toad/widgets/iris_orb.py` | o círculo |
+| `src/toad/iris_voice.py` | cliente da voz, mapa de eventos, resumo falado |
+| `src/toad/iris_theme.py` | tema |
+| `src/toad/iris_i18n.py` | tradução do rodapé |
+| `src/toad/iris_crash.py` | registro de falhas |
+| `voz/src/iris_voz/server.py` | serviço de voz |
+| `tools/fake_agent.py` | agente ACP falso para testes (não gasta cota) |
+
+## Solução de problemas
+
+- **A Íris fechou sozinha** — veja `%USERPROFILE%\.local\state\toad\crash.log`.
+- **A voz não inicia** — veja `%USERPROFILE%\.local\state\toad\iris-voz.log`; teste com `iris-voz check`.
+- **Logs dos agentes** — `%USERPROFILE%\.local\state\toad\logs\`.
+- **Testar sem gastar cota** — `iris acp "python tools/fake_agent.py"`.
+
+### Limitações conhecidas no Windows
+
+- O shell embutido do Toad (`!comando`) ainda não funciona (falta suporte a pseudo-terminal; plano: `pywinpty`).
+- Comandos executados pelo agente não aparecem num terminal ao vivo dentro da Íris.
+- Os botões de instalar agentes na tela inicial usam comandos Unix; instale pelo terminal (tabela acima).
+
+## Atualizando a partir do Toad
+
+```powershell
+git remote add upstream https://github.com/batrachianai/toad.git   # uma vez
+git fetch upstream
+git merge upstream/main
 ```
 
-## Using Toad
+As mudanças da Íris ficam concentradas em arquivos `iris_*` e em poucos pontos do código original, para facilitar esses merges.
 
-Launch Toad with the following:
+## Licença e créditos
 
-```bash
-toad
-```
+A Íris é um trabalho derivado do [Toad](https://github.com/batrachianai/toad), © Will McGugan, distribuído sob a **GNU Affero General Public License v3.0** — veja [LICENSE](LICENSE). As modificações da Íris seguem a mesma licença. O README original do Toad está em [docs/README-toad.md](docs/README-toad.md).
 
-You should see something like this:
-
-<img alt="front-fs8" src="https://github.com/user-attachments/assets/8831f7de-5349-4b3f-9de9-d4565b513108" />
-
-From this screen you will be able to find, install, and launch a coding agent.
-If you already have an agent installed, you can skip the install step.
-To launch an agent, select it and press <kbd>space</kbd>.
-
-The footer will always display the most significant keys for the current context.
-To see all the keys, press <kbd>F1</kbd> to display the help panel.
-
-### Toad CLI
-
-When running Toad, the current working directory is assumed to be your project directory.
-To use another project directory, add the path to the command.
-For example:
-
-```bash
-toad ~/projects/my-awesome-app
-```
-
-If you want to skip the initial agent screen, add the `-a` switch with the name of your chosen agent.
-For example:
-
-```bash
-toad -a open-hands
-```
-
-To see all subcommands and switches, add the `--help` switch:
-
-```bash
-toad --help
-```
-
-### Web server
-
-You can run Toad as a web application.
-
-Run the following, and click the link in the terminal:
-
-```bash
-toad serve
-```
-
-![textual-serve](https://github.com/user-attachments/assets/1d861d48-d30b-44cd-972d-5986a01360bf)
-
-## Toad development
-
-Toad was built by [Will McGugan](https://github.com/willmcgugan) and is currently under active development.
-
-To discuss Toad, see the Discussions tab, or join the #toad channel on the [Textualize discord server](https://discord.gg/Enf6Z3qhVr).
-
-
-
-### Roadmap
-
-Some planned features:
-
-- [ ] UI for MCP servers
-- [ ] Expose model selection (waiting on ACP update)
-- [x] Sessions (resume)
-- [x] Multiple agents
-- [ ] Windows native support
-- [ ] Builtin editor
-- [ ] Sidebar (widgets)
-  - [ ] Git pending changes
-
-### Reporting bugs
-
-This project is trialling a non-traditional approach to issues.
-Before an issue is created, there must be a post in Discussions, approved by a Toad dev (Currently @willmcgugan).
-
-By allowing the discussions to happen in the Discussion tabs, issues can be reserved for actionable tasks with a clear description and goal.
-
-
-## Licensing
-
-Toad is licensed under the [AGPL](./LICENSE) license. Commercial licenses are available. See [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Modelos de voz: Kokoro (Apache-2.0), Piper voice *faber* pt-BR, Whisper (MIT) — cada um sob sua própria licença.
