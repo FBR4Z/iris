@@ -396,6 +396,27 @@ SCHEMA: list[SchemaDict] = [
                 "default": "#ff8a1f",
             },
             {
+                "key": "attention_color",
+                "title": "Cor de atenção",
+                "help": "Cor do círculo enquanto o agente espera uma permissão sua.",
+                "type": "string",
+                "default": "#ffd23f",
+            },
+            {
+                "key": "error_color",
+                "title": "Cor de erro",
+                "help": "Cor do círculo quando o agente falha.",
+                "type": "string",
+                "default": "#ff4d5e",
+            },
+            {
+                "key": "agent_colors",
+                "title": "Cores por agente",
+                "help": "Cor do anel interno por agente, no formato palavra=cor, separado por vírgula. A palavra é procurada no id e no nome do agente.",
+                "type": "string",
+                "default": "claude=#d97757, codex=#10a37f, openai=#10a37f, gemini=#7b8cff",
+            },
+            {
                 "key": "plan_modes",
                 "title": "Modos de planejamento",
                 "help": "Palavras, separadas por vírgula, que identificam um modo de planejamento pelo id ou nome do modo do agente.",
