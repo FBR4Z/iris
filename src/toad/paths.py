@@ -17,8 +17,12 @@ def path_to_name(path: Path) -> str:
     Returns:
         A stringified version of the path.
     """
-    name = str(path.resolve()).lstrip("/").replace("/", "-")
-    return name
+    name = str(path.resolve())
+    # Windows paths ("C:\\Users\\...") would otherwise stay absolute, and joining them
+    # onto the data dir would write per-project data inside the project itself.
+    for separator in (":", "\\", "/"):
+        name = name.replace(separator, "-")
+    return name.strip("-")
 
 
 def get_data() -> Path:

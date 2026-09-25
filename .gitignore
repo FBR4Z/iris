@@ -24,3 +24,5 @@ sandbox/
 
 # Íris
 !voz/uv.lock
+prompt_history.jsonl
+shell_history.jsonl
