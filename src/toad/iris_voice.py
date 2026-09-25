@@ -12,7 +12,7 @@ import os
 import re
 import shlex
 from datetime import datetime
-from pathlib import Path
+from pathlib import PureWindowsPath
 from time import monotonic
 from typing import TYPE_CHECKING, Any
 
@@ -160,19 +160,19 @@ def program_from_tool(tool_call: dict[str, Any]) -> str:
         first = shlex.split(text, posix=False)[0] if text else ""
     except ValueError:
         first = text.split(" ", 1)[0]
-    name = Path(first.strip("\"'")).stem.lower()
+    name = PureWindowsPath(first.strip("\"'")).stem.lower()
     return PROGRAMS.get(name, "um comando")
 
 
 def file_from_tool(tool_call: dict[str, Any]) -> str:
     for location in tool_call.get("locations") or []:
         if path := location.get("path"):
-            return Path(path).name
+            return PureWindowsPath(path).name
     raw = tool_call.get("rawInput") or {}
     if isinstance(raw, dict):
         for key in ("file_path", "path", "filePath", "notebook_path"):
             if value := raw.get(key):
-                return Path(str(value)).name
+                return PureWindowsPath(str(value)).name
     return "um arquivo"
 
 
