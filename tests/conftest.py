@@ -43,18 +43,37 @@ def agent_data(name: str = "Claude Code", identity: str = "claude.com") -> dict:
     }
 
 
-class FakeVoice:
-    """Stands in for the iris-voz process: records what would have been said."""
+@pytest.fixture
+def spoken(monkeypatch) -> list[str]:
+    """Replace the iris-voz process with a recorder of what would have been said.
 
-    def __init__(self, voice) -> None:
-        self.spoken: list[str] = []
-        voice.ready = True
-        voice.say = lambda text, cache=False: self.spoken.append(text)
+    Applied to the class, so it's in place before the app starts.
+    """
+    from toad.iris_voice import IrisVoice
 
-        async def no_sync() -> None:
-            return None
+    said: list[str] = []
+    original_init = IrisVoice.__init__
 
-        voice.sync = no_sync
+    def init(self, app) -> None:
+        original_init(self, app)
+        self.ready = True
+
+    async def no_sync(self) -> None:
+        return None
+
+    monkeypatch.setattr(IrisVoice, "__init__", init)
+    monkeypatch.setattr(IrisVoice, "sync", no_sync)
+    monkeypatch.setattr(IrisVoice, "say", lambda self, text, cache=False: said.append(text))
+    return said
+
+
+def write_settings(settings: dict) -> None:
+    """Pre-seed settings before the app starts."""
+    import json
+
+    from toad import paths
+
+    (paths.get_config() / "toad.json").write_text(json.dumps(settings), encoding="utf-8")
 
 
 @pytest.fixture

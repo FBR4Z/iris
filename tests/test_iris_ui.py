@@ -9,7 +9,7 @@ from toad.widgets.conversation import Conversation
 from toad.widgets.iris_orb import DEFAULT_EXEC_COLOR, DEFAULT_PLAN_COLOR, IrisOrb
 from textual.color import Color
 
-from conftest import FakeVoice, agent_data, wait_until
+from conftest import agent_data, wait_until, write_settings
 
 SIZE = (130, 40)
 
@@ -130,11 +130,10 @@ async def test_slash_fechar_closes_session():
 # ----------------------------------------------------------------------- voice
 
 
-async def test_voice_announcements():
+async def test_voice_announcements(spoken):
+    write_settings({"voz": {"modo": "avisos"}})
     app = ToadApp(agent_data=agent_data(), project_dir=".")
     async with app.run_test(size=SIZE) as pilot:
-        fake = FakeVoice(app.iris_voice)
-        app.settings.set("voz.modo", "avisos")
         conversation = await start_conversation(pilot)
         voice = app.iris_voice
 
@@ -147,7 +146,7 @@ async def test_voice_announcements():
         voice.turn_over("Claude Code", "Feito.", 45)
         voice.turn_over("Claude Code", "Feito.", 2)  # too short to announce
 
-        assert fake.spoken == [
+        assert spoken == [
             "Claude Code conectado.",
             "Modo de planejamento.",
             "Modo de execução.",
@@ -156,25 +155,23 @@ async def test_voice_announcements():
         ]
 
 
-async def test_voice_completa_reads_summary():
+async def test_voice_completa_reads_summary(spoken):
+    write_settings({"voz": {"modo": "completa"}})
     app = ToadApp(agent_data=agent_data(), project_dir=".")
     async with app.run_test(size=SIZE) as pilot:
-        fake = FakeVoice(app.iris_voice)
-        app.settings.set("voz.modo", "completa")
         conversation = await start_conversation(pilot)
         conversation.prompt.append("olá")
         conversation.prompt.prompt_text_area.action_submit()
-        assert await wait_until(pilot, lambda: any("Resultado" in text for text in fake.spoken))
-        summary = next(text for text in fake.spoken if "Resultado" in text)
+        assert await wait_until(pilot, lambda: any("Resultado" in text for text in spoken))
+        summary = next(text for text in spoken if "Resultado" in text)
         assert "print(" not in summary
         assert summary.endswith("Deixei o código na tela.")
 
 
-async def test_voice_off_by_default_says_nothing():
+async def test_voice_off_by_default_says_nothing(spoken):
     app = ToadApp(agent_data=agent_data(), project_dir=".")
     async with app.run_test(size=SIZE) as pilot:
-        fake = FakeVoice(app.iris_voice)
         conversation = await start_conversation(pilot)
         conversation.current_mode = conversation.modes["plan"]
         await pilot.pause(0.2)
-        assert fake.spoken == []
+        assert spoken == []

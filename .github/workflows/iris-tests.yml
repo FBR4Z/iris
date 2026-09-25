@@ -15,9 +15,10 @@ jobs:
     env:
       PYTHONUTF8: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
       - name: Instalar dependências
         run: uv sync
       - name: Rodar testes
-        run: uv run pytest -q -p no:warnings
+        # The plugin turns failures into public annotations (logs need a login).
+        run: uv run --with pytest-github-actions-annotate-failures pytest -q -p no:warnings -rf

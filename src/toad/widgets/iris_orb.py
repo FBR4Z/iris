@@ -44,6 +44,8 @@ class OrbState:
     planning: bool = True
     asking: bool = False
     failed: bool = False
+    turns: int = 0
+    """Completed agent turns, used to spot a finished turn even if it was too quick to see."""
     mode_name: str = ""
     agent_key: str = ""
     """Lowercased identity + name of the agent, used to pick its color."""
@@ -165,6 +167,7 @@ class IrisOrb(Widget):
             planning=any(word in mode_id for word in plan_words),
             asking=session_state == "asking",
             failed=bool(getattr(conversation, "_agent_fail", False)),
+            turns=getattr(conversation, "_turn_count", 0),
             mode_name=mode.name if mode is not None else "",
             agent_key=agent_key.lower(),
             **voice_state,
@@ -194,7 +197,7 @@ class IrisOrb(Widget):
 
         previous = self._state
         state = self._state = self._read_state()
-        if previous.busy and not state.busy and not state.failed:
+        if state.turns > previous.turns and not state.failed:
             self._ripple_start = self._turn_done_at = elapsed
 
         if state.listening:

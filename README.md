@@ -36,6 +36,18 @@ A Íris é um fork do [Toad](https://github.com/batrachianai/toad), de Will McGu
 
 ## Instalação (Windows)
 
+### Instalador automático (recomendado)
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/FBR4Z/iris/main/instalar-iris.ps1)))
+```
+
+Ou, com o repositório clonado: `powershell -ExecutionPolicy Bypass -File .\instalar-iris.ps1`.
+
+Ele instala o que faltar (uv, Node.js, git), a Íris, os agentes que você escolher e a voz, **detectando GPU e memória** para escolher a versão certa: com GPU NVIDIA usa Kokoro + Whisper turbo; sem GPU instala uma versão leve (Piper + Whisper small, ~3 GB a menos). Parâmetros: `-Agentes claude,codex,gemini`, `-Voz avisos|ditado|ditado_avisos|completa|desligada|pular`, `-Simular` (mostra o que faria, sem instalar). Feche a Íris antes de rodar.
+
+### Manual
+
 Pré-requisitos: [uv](https://docs.astral.sh/uv/) e [Node.js](https://nodejs.org).
 
 ```powershell
@@ -66,7 +78,7 @@ Instale e faça login nos que você usa:
 A voz roda num serviço separado, `iris-voz` (Python 3.13, por causa das bibliotecas de GPU):
 
 ```powershell
-uv tool install --editable voz --python 3.13 --excludes voz/excludes.txt
+uv tool install --editable voz --python 3.13 --excludes voz/excludes-gpu.txt
 ```
 
 Na primeira execução ela baixa os modelos (~0,4 GB de voz em `%LOCALAPPDATA%\iris-voz\models`, mais o Whisper, ~1,6 GB). Depois ative em **Configurações → Voz**.
