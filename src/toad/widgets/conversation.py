@@ -915,8 +915,8 @@ class Conversation(containers.Vertical):
 
         if self.app.settings.get("notifications.turn_over", bool):
             self.app.system_notify(
-                f"{self.agent_title} has finished working",
-                title="Waiting for input",
+                f"{self.agent_title} terminou e aguarda você",
+                title="Pronto",
                 sound="turn-over",
             )
 
@@ -1253,8 +1253,8 @@ class Conversation(containers.Vertical):
 
                 self.app.terminal_alert()
                 self.app.system_notify(
-                    f"{self.agent_title} would like to write files",
-                    title="Permissions request",
+                    f"{self.agent_title} quer alterar arquivos",
+                    title="Pedido de permissão",
                     sound="question",
                 )
                 permissions_screen = PermissionsScreen(

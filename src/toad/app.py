@@ -547,7 +547,7 @@ class ToadApp(App, inherit_bindings=False):
             sound_path = str(files("toad.data").joinpath(f"sounds/{sound}.wav"))
             notification.audio = sound_path
 
-        icon_path = str(files("toad.data").joinpath("images/frog.png"))
+        icon_path = str(files("toad.data").joinpath("images/iris.png"))
         notification.icon = icon_path
 
         notification.send()
