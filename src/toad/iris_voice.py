@@ -342,8 +342,14 @@ class IrisVoice:
             self._handle_event(event)
         if process is self._process:
             self.ready = self.speaking = self.listening = self.transcribing = False
+            from toad import paths
+
             self.app.notify(
-                "O serviço de voz foi encerrado.", title="Voz", severity="warning"
+                "O serviço de voz foi encerrado inesperadamente.\n"
+                f"Detalhes em {paths.get_state() / 'iris-voz.log'}",
+                title="Voz",
+                severity="error",
+                timeout=10,
             )
 
     def _handle_event(self, event: dict) -> None:
