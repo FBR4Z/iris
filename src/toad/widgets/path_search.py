@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+from contextlib import suppress
 
 from operator import itemgetter
 import os
@@ -14,6 +15,7 @@ from typing import Sequence
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual import work
 from textual import getters
 from textual import containers
@@ -403,7 +405,9 @@ class PathSearch(containers.VerticalGroup):
         self.input.clear()
         self.input.focus()
 
-    @work(exclusive=True)
+    # Íris: these workers await I/O and then touch child widgets; if the prompt was
+    # removed meanwhile (session closed), don't take the whole app down.
+    @work(exclusive=True, exit_on_error=False)
     async def refresh_paths(self):
         self.option_list.set_loading(True)
         root = self.root
@@ -429,10 +433,14 @@ class PathSearch(containers.VerticalGroup):
                 return [path.absolute() for path in paths]
 
             paths = await asyncio.to_thread(make_absolute, paths)
+            if not self.is_attached:
+                return
             self.root = root
             self.paths = paths
         except Exception:
-            self.option_list.set_loading(False)
+            if self.is_attached:
+                with suppress(NoMatches):
+                    self.option_list.set_loading(False)
             raise
 
     def highlight_path(self, path: str) -> PathContent:
@@ -447,7 +455,7 @@ class PathSearch(containers.VerticalGroup):
             content.plain, list(content.spans), cell_length=content.cell_length
         )
 
-    @work(description="watch_paths")
+    @work(description="watch_paths", exit_on_error=False)
     async def watch_paths(self, paths: list[Path]) -> None:
 
         def path_display(path: Path) -> str:
@@ -466,6 +474,8 @@ class PathSearch(containers.VerticalGroup):
             return display_paths
 
         self.display_paths = await asyncio.to_thread(make_display_paths)
+        if not self.is_attached:
+            return
 
         self.option_list.highlighted = None
         self._update_paths(self.display_paths)
@@ -481,7 +491,7 @@ class PathSearch(containers.VerticalGroup):
 
         self.post_message(PromptSuggestion(""))
 
-    @work(description="update_paths")
+    @work(description="update_paths", exit_on_error=False)
     async def _update_paths(self, paths: list[str]) -> None:
         """Update the paths index.
 
@@ -489,4 +499,6 @@ class PathSearch(containers.VerticalGroup):
             paths: A list of paths.
         """
         await self.fuzzy_index.update_paths(paths)
-        self.call_after_refresh(self.option_list.set_loading, False)
+        if self.is_attached:
+            with suppress(NoMatches):
+                self.call_after_refresh(self.option_list.set_loading, False)

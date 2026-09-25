@@ -772,9 +772,20 @@ class ToadApp(App, inherit_bindings=False):
 
     def _handle_exception(self, error: Exception) -> None:
         # Íris: keep a record, since the traceback is easy to miss when the app exits.
+        from textual.worker import WorkerFailed
+
         from toad.iris_crash import log_exception
 
-        log_exception(error)
+        path = log_exception(error)
+        if isinstance(error, WorkerFailed) and self.is_running:
+            # A background task failed (e.g. it outlived the widget it was updating).
+            # That task is over; the rest of the app is fine, so don't quit on the user.
+            self.notify(
+                f"Um erro interno foi registrado em {path}.",
+                title="Íris",
+                severity="warning",
+            )
+            return
         super()._handle_exception(error)
 
     def action_iris_listen(self) -> None:
@@ -782,14 +793,15 @@ class ToadApp(App, inherit_bindings=False):
         from toad.widgets.conversation import Conversation
 
         conversation = self.screen.query_one_optional(Conversation)
-        if conversation is None:
-            self.notify("Abra uma conversa para usar o ditado.", title="Voz")
-            return
-        try:
-            names = sorted(path.name for path in conversation.project_path.iterdir())[:40]
-        except OSError:
-            names = []
-        self.iris_voice.toggle_listen(conversation, hint=", ".join(names))
+        # Without a conversation (e.g. the launcher) only voice commands apply.
+        hint = "Íris, Claude, Codex, Gemini"
+        if conversation is not None:
+            try:
+                names = sorted(path.name for path in conversation.project_path.iterdir())
+                hint += ", " + ", ".join(names[:40])
+            except OSError:
+                pass
+        self.iris_voice.toggle_listen(conversation, hint=hint)
 
     def action_help_quit(self) -> None:
         if (time := monotonic()) - self.last_ctrl_c_time <= 5.0:

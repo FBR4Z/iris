@@ -118,7 +118,8 @@ async def test_prompt_round_trip_with_fake_agent():
         conversation.prompt.append("olá")
         conversation.prompt.prompt_text_area.action_submit()
         assert await wait_until(pilot, lambda: conversation.turn == "client" and conversation._turn_count >= 1)
-        assert await wait_until(pilot, lambda: "concluído" in orb.render().plain, timeout=3)
+        # The orb registered the finished turn (the "concluído" label itself only lasts 2.5 s).
+        assert await wait_until(pilot, lambda: orb._turn_done_at is not None)
 
 
 async def test_slash_fechar_closes_session():

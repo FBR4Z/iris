@@ -228,6 +228,7 @@ class IrisVoice:
         self.transcribing = False
         self.level = 0.0
         self.engines = ""
+        self.last_spoken = ""
 
     # ----------------------------------------------------------------- settings
 
@@ -384,6 +385,8 @@ class IrisVoice:
     # ------------------------------------------------------------------ speaking
 
     def say(self, text: str, cache: bool = False) -> None:
+        if text:
+            self.last_spoken = text
         if text and self.ready:
             self.send({"cmd": "say", "text": text, "cache": cache})
 
@@ -463,7 +466,30 @@ class IrisVoice:
 
     def _deliver_transcript(self, text: str) -> None:
         target, self._transcript_target = self._transcript_target, None
-        if not text or target is None or not target.is_attached:
+        if target is not None and not target.is_attached:
+            target = None
+        self.handle_transcript(text, target)
+
+    def handle_transcript(self, text: str, target: Any) -> None:
+        """Run it as a voice command ("Íris, ...") or type it into `target`'s prompt."""
+        if not text:
+            return
+        if self._get("comandos", True):
+            from toad.iris_commands import parse_command
+
+            command = parse_command(text)
+            if command is not None and command.name != "desconhecido":
+                self.app.run_worker(self._run_command(command, target))
+                return
+            if command is not None:
+                # Addressed to Íris but not a command: don't lose what was said.
+                text = command.argument
+                self.app.notify(
+                    "Não reconheci o comando; o texto foi para o campo de digitação.",
+                    title="Íris",
+                )
+        if target is None:
+            self.app.notify("Abra uma conversa para ditar.", title="Voz")
             return
         prompt = target.prompt
         current = prompt.prompt_text_area.text
@@ -471,6 +497,17 @@ class IrisVoice:
         prompt.focus()
         if self._get("enviar_ditado", False):
             prompt.prompt_text_area.action_submit()
+
+
+    async def _run_command(self, command: Any, target: Any) -> None:
+        from toad.iris_commands import run_command
+
+        self.app.notify(f"Comando: {command.name.replace('_', ' ')}", title="Íris", timeout=2)
+        if reply := await run_command(self.app, command, target):
+            if self.announces or self.reads_responses:
+                self.say(reply)
+            else:  # dictation-only mode has no speech: show it instead
+                self.app.notify(reply, title="Íris")
 
 
 class _Blank(dict):

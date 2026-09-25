@@ -143,6 +143,25 @@ Em **Configurações → Voz → Modo**:
 | `erro` / `tchau` | recusa ou limite / ao sair | "Algo deu errado." / "Até logo." |
 | `trabalhando`, `lendo`, `pesquisando`, `plano` | — | silenciados por padrão |
 
+### Comandos de voz
+
+Nos modos com ditado, aperte **F9** e comece a frase com **"Íris"** — em vez de ir para o agente, o comando é executado pela própria Íris (funciona igual com Claude, Codex ou Gemini, e também na tela inicial):
+
+| Diga | Faz |
+|---|---|
+| "Íris, modo planejamento" / "vamos planejar" | entra no modo de planejamento do agente |
+| "Íris, modo execução" / "sai do planejamento" | volta ao modo normal |
+| "Íris, abre o Claude / o Codex / o Gemini" | abre o agente numa nova aba |
+| "Íris, nova sessão" · "próxima sessão" · "sessão anterior" · "fechar sessão" | sessões |
+| "Íris, pode mandar" / "envia" | envia o texto ditado |
+| "Íris, apaga o texto" | limpa o campo de digitação |
+| "Íris, para" / "cancela" | interrompe o agente |
+| "Íris, silêncio" / "para de falar" | cala a leitura em andamento |
+| "Íris, repete" | repete a última fala |
+| "Íris, que horas são?" · "status" · "ajuda" · "sair" | — |
+
+Sem o "Íris" no começo, é ditado normal. Se ela não reconhecer o comando, o texto vai para o campo de digitação (nada se perde). Desative em *Voz → Comandos de voz*.
+
 **Motores:** fala com [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (natural, ideal com GPU; vozes Dora, Alex, Santa) ou [Piper](https://github.com/OHF-Voice/piper1-gpl) (leve, processador); escuta com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (`large-v3-turbo` na GPU, `small` no processador). O modo *Automático* escolhe conforme a máquina.
 
 Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; geração de fala ~7× mais rápida que o tempo real.

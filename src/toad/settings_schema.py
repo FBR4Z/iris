@@ -481,6 +481,13 @@ SCHEMA: list[SchemaDict] = [
                 "default": 350,
             },
             {
+                "key": "comandos",
+                "title": "Comandos de voz?",
+                "help": "Ditado que começa com 'Íris' vira comando da própria Íris (ex.: 'Íris, modo planejamento', 'Íris, abrir o Gemini', 'Íris, ajuda').",
+                "type": "boolean",
+                "default": True,
+            },
+            {
                 "key": "enviar_ditado",
                 "title": "Enviar o ditado automaticamente?",
                 "help": "Se desligado, o texto ditado vai para o campo de digitação para você revisar.",
