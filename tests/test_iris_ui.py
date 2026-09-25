@@ -67,7 +67,11 @@ async def test_conversation_layout_in_portuguese():
         titles = [c.title for c in app.screen.query("SideBarCollapsible")]
         assert titles == ["Íris", "Plano", "Projeto"]
         assert app.settings.get("ui.prompt_message", str) == "Como posso ajudar hoje?"
-        assert {"Enviar", "Modos", "Barra lateral", "Início"} <= footer_labels(app)
+        # "Enviar" only shows once the prompt has focus.
+        assert await wait_until(
+            pilot,
+            lambda: {"Enviar", "Modos", "Barra lateral", "Início"} <= footer_labels(app),
+        )
 
 
 async def test_orb_and_borders_follow_mode():
