@@ -7,7 +7,8 @@ call, then renames the session — the same sequence Claude Code sends.
 
 Options are reported like Claude Code (`configOptions`), or like Gemini CLI (`models`)
 with `--models`. Prompts that mention "skill" run a skill, "eco" answer with the
-prompt as received (plus the MCP servers of the session), "tchau" drops the connection.
+prompt as received (plus the MCP servers of the session), "comando" run a command that
+fails (output as terminal metadata), "tchau" drops the connection.
 """
 
 import json
@@ -85,7 +86,43 @@ def say(text: str) -> None:
     update({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}})
 
 
+def run_command() -> None:
+    """A Bash call reported the way Claude Code does when the client takes terminal output."""
+    meta = {"claudeCode": {"toolName": "Bash"}}
+    update(
+        {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "b1",
+            "_meta": {**meta, "terminal_info": {"terminal_id": "b1"}},
+            "title": "idf.py flash",
+            "kind": "execute",
+            "status": "pending",
+            "content": [{"type": "terminal", "terminalId": "b1"}],
+        }
+    )
+    progress = {"claudeCode": {"toolName": "Bash", "toolResponse": {"elapsedTimeSeconds": 75}}}
+    update({"sessionUpdate": "tool_call_update", "toolCallId": "b1", "status": "in_progress", "_meta": progress})
+    time.sleep(2)
+    for data in ("Connecting....\r\n", "\x1b[31mA fatal error occurred\x1b[0m\r\n"):
+        update(
+            {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "b1",
+                "_meta": {"terminal_output": {"terminal_id": "b1", "data": data}},
+            }
+        )
+    update(
+        {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "b1",
+            "status": "failed",
+            "_meta": {**meta, "terminal_exit": {"terminal_id": "b1", "exit_code": 2, "signal": None}},
+        }
+    )
+
+
 def main() -> None:
+    terminal_output = False
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
     for line in sys.stdin:
@@ -95,6 +132,8 @@ def main() -> None:
             continue
         method, request_id = request.get("method"), request.get("id")
         if method == "initialize":
+            capabilities = request["params"].get("clientCapabilities", {})
+            terminal_output = (capabilities.get("_meta") or {}).get("terminal_output")
             send(
                 {
                     "jsonrpc": "2.0",
@@ -140,10 +179,12 @@ def main() -> None:
             text := " ".join(
                 block.get("text", "") for block in request["params"].get("prompt", [])
             )
-        ) and ("eco" in text or "tchau" in text or "skill" in text):
+        ) and ("eco" in text or "tchau" in text or "skill" in text or "comando" in text):
             if "tchau" in text:
                 return
-            if "skill" in text:
+            if "comando" in text and terminal_output:
+                run_command()
+            elif "skill" in text:
                 update(
                     {
                         "sessionUpdate": "tool_call",

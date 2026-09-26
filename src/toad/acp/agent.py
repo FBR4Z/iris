@@ -114,6 +114,25 @@ def generate_datetime_filename(
     return file_name_stem + suffix
 
 
+def merge_terminal_meta(tool_call: dict, update: dict) -> None:
+    """Collect the output of a command the agent runs itself.
+
+    It arrives in `_meta` (`terminal_output` chunks, then `terminal_exit`), which each
+    update replaces, so the output so far is kept in `_iris_terminal`.
+    """
+    meta = update.get("_meta") or {}
+    chunk = meta.get("terminal_output_delta") or meta.get("terminal_output")
+    exit_info = meta.get("terminal_exit")
+    if not chunk and not exit_info:
+        return
+    terminal = dict(tool_call.get("_iris_terminal") or {"output": ""})
+    if chunk and isinstance(data := chunk.get("data"), str):
+        terminal["output"] += data
+    if exit_info:
+        terminal["exit_code"] = exit_info.get("exit_code")
+    tool_call["_iris_terminal"] = terminal
+
+
 @rich.repr.auto
 class Agent(AgentBase):
     """An agent that speaks the APC (https://agentclientprotocol.com/overview/introduction) protocol."""
@@ -307,6 +326,7 @@ class Agent(AgentBase):
                 "sessionUpdate": "tool_call",
                 "toolCallId": tool_call_id,
             }:
+                merge_terminal_meta(update, update)
                 self.tool_calls[tool_call_id] = update
                 self.post_message(messages.ToolCall(update))
 
@@ -322,6 +342,7 @@ class Agent(AgentBase):
                     for key, value in update.items():
                         if value is not None:
                             current_tool_call[key] = value
+                    merge_terminal_meta(current_tool_call, update)
 
                     self.post_message(
                         messages.ToolCallUpdate(deepcopy(current_tool_call), update)
@@ -336,6 +357,7 @@ class Agent(AgentBase):
                     for key, value in update.items():
                         if value is not None:
                             current_tool_call[key] = value
+                    merge_terminal_meta(current_tool_call, update)
 
                     self.tool_calls[tool_call_id] = current_tool_call
                     self.post_message(messages.ToolCall(current_tool_call))
@@ -763,6 +785,9 @@ class Agent(AgentBase):
                     },
                     # Our terminal tool needs a pty; on Windows let the agent run commands itself.
                     "terminal": sys.platform != "win32",
+                    # Commands the agent runs itself report their output as terminal
+                    # metadata on the tool call (Claude Code, codex-acp).
+                    "_meta": {"terminal_output": True},
                 },
                 {
                     "name": toad.NAME,

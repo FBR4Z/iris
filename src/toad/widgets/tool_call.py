@@ -32,6 +32,27 @@ class MarkdownContent(Markdown):
     pass
 
 
+class TerminalOutput(Static):
+    DEFAULT_CSS = """
+    TerminalOutput {
+        height: auto;
+        padding: 0 1;
+        background: $boost;
+    }
+    """
+
+
+def elapsed_seconds(tool_call: protocol.ToolCall) -> str:
+    """How long a running tool has taken ("42s", "3min 05s"), from Claude Code's progress."""
+    meta = tool_call.get("_meta") or {}
+    response = (meta.get("claudeCode") or {}).get("toolResponse") or {}
+    seconds = response.get("elapsedTimeSeconds") if isinstance(response, dict) else None
+    if not isinstance(seconds, (int, float)) or seconds < 1:
+        return ""
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes}min {seconds:02d}s" if minutes else f"{seconds}s"
+
+
 class ToolCallItem(containers.HorizontalGroup):
     def compose(self) -> ComposeResult:
         yield Static(classes="icon")
@@ -183,6 +204,13 @@ class ToolCall(containers.VerticalGroup):
             header += Content.assemble(" ", pill("failed", "$error-muted", "$error"))
         elif status == "completed":
             header += Content.from_markup(" [$success]✔")
+
+        if status in ("pending", "in_progress") and (elapsed := elapsed_seconds(tool_call)):
+            # Long commands (a flash waiting for BOOT) show they are still running.
+            header += Content.from_markup(f" [$text-secondary]⏱ {elapsed}")
+        exit_code = (tool_call.get("_iris_terminal") or {}).get("exit_code")
+        if isinstance(exit_code, int) and exit_code:
+            header += Content.from_markup(f" [$error](código {exit_code})")
         return header
 
     def watch_expanded(self) -> None:
@@ -255,7 +283,11 @@ class ToolCall(containers.VerticalGroup):
                     self.has_content = True
 
                 case {"type": "terminal", "terminalId": terminal_id}:
-                    pass
+                    # A command the agent ran itself; its output comes as terminal metadata.
+                    terminal = (self.tool_call or {}).get("_iris_terminal") or {}
+                    if output := terminal.get("output", "").replace("\r\n", "\n").rstrip():
+                        yield TerminalOutput(Content.from_rich_text(Text.from_ansi(output)))
+                        self.has_content = True
 
 
 if __name__ == "__main__":

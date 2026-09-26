@@ -341,3 +341,45 @@ async def test_agent_disconnect_is_reported():
                 "O agente desconectou" in note.source for note in app.screen.query(MarkdownNote)
             ),
         )
+
+
+def test_terminal_meta_is_collected():
+    from toad.acp.agent import merge_terminal_meta
+    from toad.widgets.tool_call import elapsed_seconds
+
+    tool_call: dict = {"toolCallId": "b1"}
+    merge_terminal_meta(tool_call, {"_meta": {"claudeCode": {}}})
+    assert "_iris_terminal" not in tool_call
+    for data in ("um\n", "dois\n"):
+        merge_terminal_meta(tool_call, {"_meta": {"terminal_output": {"data": data}}})
+    merge_terminal_meta(tool_call, {"_meta": {"terminal_exit": {"exit_code": 0}}})
+    assert tool_call["_iris_terminal"] == {"output": "um\ndois\n", "exit_code": 0}
+
+    progress = {"_meta": {"claudeCode": {"toolResponse": {"elapsedTimeSeconds": 185.4}}}}
+    assert elapsed_seconds(progress) == "3min 05s"
+    assert elapsed_seconds({"_meta": {"claudeCode": {"toolResponse": {"elapsedTimeSeconds": 42}}}}) == "42s"
+    assert elapsed_seconds({}) == ""
+
+
+async def test_agent_command_output_is_shown():
+    from toad.widgets.tool_call import TerminalOutput, ToolCall, ToolCallHeader
+
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start_conversation(pilot)
+        assert "'_meta': {'terminal_output': True}" in agent_log(conversation)
+        conversation.prompt.append("rode um comando")
+        conversation.prompt.prompt_text_area.action_submit()
+
+        def header() -> str:
+            tool_call = app.screen.query_one_optional(ToolCall)
+            found = tool_call and tool_call.query_one_optional(ToolCallHeader)
+            return found.render().plain if found else ""
+
+        assert await wait_until(pilot, lambda: "⏱ 1min 15s" in header())
+        assert await wait_until(pilot, lambda: "(código 2)" in header())
+        assert "⏱" not in header()
+        output = app.screen.query_one(ToolCall).query_one(TerminalOutput)
+        text = output.render().plain
+        assert "Connecting...." in text and "A fatal error occurred" in text
+        assert "\x1b" not in text and "\r" not in text
