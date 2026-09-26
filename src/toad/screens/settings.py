@@ -107,6 +107,7 @@ class SettingsScreen(ModalScreen):
                         elif setting.type == "boolean":
                             with self.prevent(Checkbox.Changed):
                                 yield Checkbox(
+                                    "Ativar",
                                     value=bool(value),
                                     classes="input",
                                     name=setting.key,
