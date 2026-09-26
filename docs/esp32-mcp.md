@@ -13,10 +13,32 @@ agentes que declaram suporte (Claude e Gemini declaram; os outros são pulados e
 ```powershell
 iris projeto novo Estufa C:\esp\estufa -d "Controle da estufa com ESP32-S3" -a claude
 iris projeto adicionar Estufa C:\docs\estufa\pinagem.md
-iris projeto mcp Estufa esp-idf -- eim run "idf.py mcp-server"
+iris projeto mcp Estufa esp-idf -- C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe C:\caminho\da\iris\tools\esp_idf_mcp.py C:\esp\estufa
 iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
 iris projeto abrir Estufa
 ```
+
+## ESP-IDF no Windows: `tools/esp_idf_mcp.py`
+
+Não use `idf.py mcp-server` direto (nem via `eim run`, que no Windows só existe na interface
+gráfica). O lançador `tools/esp_idf_mcp.py` resolve duas coisas:
+
+- **Ambiente:** carrega o perfil do PowerShell que o EIM cria
+  (`C:\Espressif\tools\Microsoft.v*.PowerShell_profile.ps1`, ou `--perfil`) num processo
+  separado, sem sujar a saída padrão, que é o canal MCP.
+- **Travamento:** no ESP-IDF 6.1, `project://status`, `set_target`, `build_project` e
+  `flash_project` abrem subprocessos que herdam o stdin; no Windows eles travam para sempre
+  enquanto o servidor lê o stdin. O lançador faz os subprocessos usarem `stdin=DEVNULL`.
+
+Pré-requisito: o pacote `mcp` **1.x** no Python do ESP-IDF (o 2.x renomeou o `FastMCP` e o
+`idf.py` 6.1 não abre):
+
+```powershell
+C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe -m pip install "mcp[cli]<2"
+```
+
+Conferido em 26/09/2026 com o `hello_world`: `set_target esp32` em ~40 s e `build_project` em
+~65 s pela ferramenta MCP.
 
 ## Avaliação
 
@@ -24,7 +46,7 @@ iris projeto abrir Estufa
 |---|---|---|---|
 | 1 | [AstroQuestStudio/thonny-ai](https://github.com/AstroQuestStudio/thonny-ai) | plugin do Thonny + MCP: roda código no board, loops longos, arquivos e sincronização, visível no shell do Thonny | **Usar para MicroPython.** Resolve o conflito da porta serial: o agente fala HTTP com o plugin (`127.0.0.1:47821`, `THONNY_AI_PORT`), que reaproveita a conexão do Thonny. |
 | 2 | fatihcvs/thonny-ai | fork do 1 | Dispensável; instalar do original. |
-| 3 | ESP-IDF Tools MCP (oficial, `idf.py mcp-server`) | `set_target`, `build_project`, `flash_project`, `clean_project`; recursos `project://status`, `config`, `devices` | **Usar para ESP-IDF.** Oficial, já vem com o ESP-IDF v6.0+ (EIM v0.8.1+ com a feature `mcp`). Não tem monitor. |
+| 3 | ESP-IDF Tools MCP (oficial, `idf.py mcp-server`) | `set_target`, `build_project`, `flash_project`, `clean_project`; recursos `project://status`, `config`, `devices` | **Usar para ESP-IDF.** Oficial, já vem com o ESP-IDF v6.0+ (EIM v0.8.1+ com a feature `mcp`). Não tem monitor. No Windows, abrir pelo `tools/esp_idf_mcp.py` (veja abaixo). |
 | 4 | Espressif Documentation MCP (oficial, http) | documentação e API do ESP-IDF | **Usar**, complementa o 3. Remoto, então precisa de internet liberada na rede da fábrica. |
 | 5 | [Maty403/esp-idf-mcp](https://github.com/Maty403/esp-idf-mcp) | build → flash → **monitor** → pytest-embedded | **Usar como complemento do 3 para o monitor.** Ao contrário do levantamento original, hoje ele tem sessões de monitor persistentes (`monitor_open`/`monitor_read`/`monitor_send`/`monitor_close`), filtro de log, histórico em `.esp_monitor_full.log` e foi feito no Windows (com contorno para o `usbser.sys`). |
 | 6 | AIRcableLLC/esp-workspace-mcp | build/flash via EIM + arquivos + shell arbitrário com jobs, token Bearer | **Não usar com a Íris.** Os agentes já leem, escrevem e rodam comandos (com o pedido de permissão da Íris); um shell arbitrário via MCP contornaria esse controle. |
@@ -42,7 +64,7 @@ iris projeto abrir Estufa
 
 ```powershell
 # ESP-IDF (monitor pelo 5)
-iris projeto mcp Estufa esp-idf -- eim run "idf.py mcp-server"
+iris projeto mcp Estufa esp-idf -- C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe C:\caminho\da\iris\tools\esp_idf_mcp.py C:\esp\estufa
 iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
 iris projeto mcp Estufa esp-monitor -- python C:\ferramentas\esp-idf-mcp\esp_idf_mcp.py
 
