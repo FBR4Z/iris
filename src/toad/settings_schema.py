@@ -386,10 +386,18 @@ SCHEMA: list[SchemaDict] = [
             {
                 "key": "orb_theme",
                 "title": "Tema do olho",
-                "help": "Arco: anel estilo reator (cores de planejamento e execução abaixo). Sharingan: olho vermelho com 1 tomoe no planejamento, 3 na execução e Mangekyō quando uma skill ou subagente está rodando (ou num modo sem permissões).",
+                "help": "Arco: anel estilo reator (cores de planejamento e execução abaixo). Os olhos mudam em três níveis: planejamento, execução e nível máximo (skill ou subagente rodando, ou modo sem permissões). Sharingan: 1 tomoe, 3 tomoe, Mangekyō. Rinnegan: anéis roxos, Rinne Sharingan. Byakugan: veias que saltam. Modo Sábio: olho de sapo com pupila horizontal. Olho de Sauron: fenda de fogo que se abre. HAL 9000: brilho vermelho que cresce.",
                 "type": "choices",
                 "default": "arco",
-                "choices": [("Arco (reator)", "arco"), ("Sharingan", "sharingan")],
+                "choices": [
+                    ("Arco (reator)", "arco"),
+                    ("Sharingan", "sharingan"),
+                    ("Rinnegan", "rinnegan"),
+                    ("Byakugan", "byakugan"),
+                    ("Modo Sábio (sapo)", "sabio"),
+                    ("Olho de Sauron", "sauron"),
+                    ("HAL 9000", "hal"),
+                ],
             },
             {
                 "key": "elevated_modes",

@@ -14,6 +14,8 @@ from textual.app import RenderResult
 from textual.color import Color
 from textual.widget import Widget
 
+from toad.widgets.iris_eyes import EYES, EyeContext, EyeTheme
+
 if TYPE_CHECKING:
     from toad.widgets.conversation import Conversation
 
@@ -33,9 +35,6 @@ DEFAULT_ELEVATED_MODES = "bypass, yolo"
 
 THEME_ARC = "arco"
 THEME_SHARINGAN = "sharingan"
-SHARINGAN_PLAN_COLOR = "#a8101f"
-SHARINGAN_EXEC_COLOR = "#e3122d"
-MANGEKYO_COLOR = "#ff2a3f"
 
 ELEVATED_TOOLS = {"skill", "agent", "task", "activate_skill", "delegate_to_agent"}
 """Tools that mean a skill or a sub-agent is running (Claude Code, Gemini CLI)."""
@@ -161,8 +160,13 @@ class IrisOrb(Widget):
 
     @property
     def theme(self) -> str:
-        """Look of the orb: "arco" (arc reactor) or "sharingan"."""
+        """Look of the orb: "arco" (arc reactor) or one of the eyes (e.g. "sharingan")."""
         return self._setting("iris.orb_theme", THEME_ARC).strip().lower()
+
+    @property
+    def eye(self) -> EyeTheme | None:
+        """The eye theme, or None for the arc reactor."""
+        return EYES.get(self.theme)
 
     def _conversation(self) -> Conversation | None:
         from toad.widgets.conversation import Conversation
@@ -251,7 +255,7 @@ class IrisOrb(Widget):
         if state.elevated and not previous.elevated:
             # Going up a level: a pulse out of the core.
             self._ripple_start = elapsed
-        sharingan = self.theme == THEME_SHARINGAN
+        eye = self.eye
 
         if state.listening:
             target = Color.parse(DEFAULT_LISTEN_COLOR)
@@ -259,13 +263,13 @@ class IrisOrb(Widget):
             target = self._parse_color("iris.error_color", DEFAULT_ERROR_COLOR)
         elif state.asking:
             target = self._parse_color("iris.attention_color", DEFAULT_ATTENTION_COLOR)
-        elif sharingan:
+        elif eye is not None:
             if state.elevated:
-                target = Color.parse(MANGEKYO_COLOR)
+                target = Color.parse(eye.elevated_color)
             elif state.planning:
-                target = Color.parse(SHARINGAN_PLAN_COLOR)
+                target = Color.parse(eye.plan_color)
             else:
-                target = Color.parse(SHARINGAN_EXEC_COLOR)
+                target = Color.parse(eye.exec_color)
         elif state.planning:
             target = self._parse_color("iris.plan_color", DEFAULT_PLAN_COLOR)
         else:
@@ -329,8 +333,8 @@ class IrisOrb(Widget):
         width = self.size.width
         label_lines = self.LABEL_LINES if self.show_label else 0
         rows = max(self.size.height - label_lines, 1)
-        if self.theme == THEME_SHARINGAN:
-            text = self._render_eye(width, rows)
+        if (eye := self.eye) is not None:
+            text = self._render_eye(width, rows, eye)
         else:
             text = self._render_ring(width, rows)
         if self.show_label:
@@ -448,12 +452,8 @@ class IrisOrb(Widget):
             text.append("\n")
         return text
 
-    def _render_eye(self, width: int, rows: int) -> Text:
-        """Sharingan theme: a filled red iris; pupil, ring and tomoe are the dark gaps.
-
-        Planning shows one tomoe, execution three, and a skill or sub-agent turns it
-        into the Mangekyō (a three-bladed pinwheel).
-        """
+    def _render_eye(self, width: int, rows: int, eye: EyeTheme) -> Text:
+        """Eye themes: each dot of the disk is lit (or left dark) by the eye's field."""
         elapsed = self._elapsed
         boot = ease_out(elapsed / BOOT_SECONDS)
         dots_w, dots_h = width * 2, rows * 4
@@ -467,40 +467,17 @@ class IrisOrb(Widget):
         if radius <= 1:
             return self._to_text(bits, glow, colors)
 
-        rotation = self._angle
-        mangekyo = self._elevation > 0.5
-        tomoe = 1 if self._state.planning else 3
-        pupil = 0.17 * (1 + 0.5 * self._voice_level * self._state.speaking)
-        ring = 0.58
-        head = 0.17
-        tail_arc = 1.1
-
-        def is_gap(r: float, theta: float) -> bool:
-            if mangekyo:
-                if r < 0.22:
-                    return True
-                # Blades curve with the radius and taper towards the rim.
-                phi = theta - rotation + 2.4 * r
-                sector = TAU / 3
-                offset = (phi + sector / 2) % sector - sector / 2
-                return r < 0.93 and abs(offset) < 0.6 * (1 - r) ** 0.7 + 0.08
-            if r < pupil or abs(r - ring) < 0.035:
-                return True
-            for index in range(tomoe):
-                angle = rotation + index * TAU / tomoe
-                distance = math.sqrt(
-                    max(r * r + ring * ring - 2 * r * ring * math.cos(theta - angle), 0)
-                )
-                if distance < head:
-                    return True
-                # The comma's tail hugs the ring behind the head, thinning to a point.
-                behind = (angle - theta) % TAU
-                if behind < tail_arc:
-                    along = behind / tail_arc
-                    if abs(r - (ring + 0.1 * along)) < head * 0.75 * (1 - along) ** 1.2:
-                        return True
-            return False
-
+        context = EyeContext(
+            color=self._color,
+            rotation=self._angle,
+            elapsed=elapsed,
+            planning=self._state.planning,
+            elevation=self._elevation,
+            activity=self._activity,
+            voice=self._voice_level,
+            speaking=self._state.speaking,
+        )
+        field = eye.field
         limit = radius * boot
         for iy in range(dots_h):
             dy = iy + 0.5 - center_y
@@ -511,19 +488,15 @@ class IrisOrb(Widget):
                 distance = math.hypot(dx, dy)
                 if distance > limit:
                     continue
-                r = distance / radius
-                theta = math.atan2(dy, dx)
-                if is_gap(r, theta):
+                dot = field(context, distance / radius, math.atan2(dy, dx))
+                if dot is None:
                     continue
-                brightness = 0.45 + 0.4 * r
-                if r > 0.86:
-                    # Bright rim, with a sheen that circles faster while working.
-                    sheen = (rotation * 1.5 - theta) % TAU
-                    brightness = 0.9 + 0.3 * max(0.0, 1 - sheen / (TAU * 0.3))
+                brightness, color = dot
                 cx, cy = ix // 2, iy // 4
                 bits[cy][cx] |= DOT_BITS[iy % 4][ix % 2]
                 if brightness > glow[cy][cx]:
                     glow[cy][cx] = brightness
+                    colors[cy][cx] = self._color if color is None else color
 
         if self._ripple_start is not None:
             progress = (elapsed - self._ripple_start) / RIPPLE_SECONDS
@@ -562,11 +535,11 @@ class IrisOrb(Widget):
             phase, status = "aguardando você", "permissão"
         else:
             phase = "planejamento" if state.planning else "execução"
-            if self.theme == THEME_SHARINGAN:
+            if (eye := self.eye) is not None:
                 if state.elevated:
-                    phase = "mangekyō"
+                    phase = eye.labels[2]
                 elif not state.planning:
-                    phase = "sharingan"
+                    phase = eye.labels[1]
             if state.speaking:
                 status = "falando"
             elif state.busy and state.elevated:

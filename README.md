@@ -29,7 +29,15 @@ A Íris é um fork do [Toad](https://github.com/batrachianai/toad), de Will McGu
   - anel interno na **cor do agente** (Claude terracota, Codex verde, Gemini azul-violeta);
   - respira parado, gira rápido trabalhando, pulsa **amarelo** pedindo permissão e **vermelho** em erro;
   - solta uma **onda** ao concluir um turno e "liga" com animação ao abrir;
-  - tema **Sharingan** opcional: 1 tomoe no planejamento, 3 na execução e **Mangekyō** quando uma skill ou subagente roda.
+  - temas de olho opcionais, todos com três níveis (planejamento, execução e nível máximo, quando uma skill ou subagente roda):
+    - **Sharingan**: 1 tomoe, 3 tomoe, **Mangekyō**;
+    - **Rinnegan**: anéis roxos que se expandem, **Rinne Sharingan**;
+    - **Byakugan**: olho pálido, veias que saltam e pulsam, 360°;
+    - **Modo Sábio**: olho de sapo dourado com pupila horizontal (homenagem ao Toad), faixa laranja;
+    - **Olho de Sauron**: fenda de fogo que se abre;
+    - **HAL 9000**: brilho vermelho que cresce.
+
+    Prévia em PNG sem abrir a Íris: `uv run --with pillow python tools/preview_orb.py 40 12 --png olhos.png` (opção `--tema rinnegan,hal`). Os olhos ficam em `src/toad/widgets/iris_eyes.py`.
 - **Projetos** — pastas e arquivos de qualquer lugar ligados a um projeto, com descrição e servidores MCP (ex.: ESP-IDF).
 - **`/model`, `/esforco`, `/modo`** — troca modelo, nível de esforço e modo do Claude e do Gemini sem sair da conversa.
 - **Voz local e independente do modelo** (opcional) — avisos falados, ditado com F9 e leitura de respostas. Nada sai da sua máquina.
@@ -225,7 +233,7 @@ Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; g
 
 Além das do Toad, em **Configurações**:
 
-- **Íris** — tema do olho (Arco ou Sharingan); modos tratados como nível máximo (padrão: bypass, yolo); cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
+- **Íris** — tema do olho (Arco, Sharingan, Rinnegan, Byakugan, Modo Sábio, Olho de Sauron ou HAL 9000); modos tratados como nível máximo (padrão: bypass, yolo); cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
 - **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, palavra de ativação, só CPU, envio automático do ditado.
 
 O arquivo fica em `%USERPROFILE%\.config\toad\toad.json`.

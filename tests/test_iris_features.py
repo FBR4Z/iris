@@ -283,6 +283,37 @@ async def test_sharingan_orb_levels():
         assert await wait_until(pilot, lambda: "MANGEKYŌ" in orb.render().plain)
 
 
+def test_every_eye_draws_each_level():
+    from textual.color import Color
+    from toad.settings_schema import SCHEMA
+    from toad.widgets.iris_eyes import EYES, EyeContext
+
+    iris = next(group for group in SCHEMA if group["key"] == "iris")
+    theme_field = next(field for field in iris["fields"] if field["key"] == "orb_theme")
+    assert {value for _, value in theme_field["choices"]} == {"arco", *EYES}
+    for eye in EYES.values():
+        drawings = []
+        for planning, elevation in ((True, 0.0), (False, 0.0), (False, 1.0)):
+            context = EyeContext(
+                color=Color.parse(eye.plan_color),
+                rotation=0.6,
+                elapsed=10.0,
+                planning=planning,
+                elevation=elevation,
+                activity=1.0,
+            )
+            lit = [
+                eye.field(context, r / 20, theta / 20 * 6.283) is not None
+                for r in range(20)
+                for theta in range(20)
+            ]
+            # Some dots lit, some dark (pupil, rings, veins...).
+            assert any(lit) and not all(lit), eye.key
+            drawings.append(lit)
+        # Each level looks different.
+        assert drawings[0] != drawings[1] != drawings[2], eye.key
+
+
 async def test_project_context_and_mcp(tmp_path):
     folder = tmp_path / "estufa"
     folder.mkdir()

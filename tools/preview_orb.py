@@ -1,93 +1,105 @@
-"""Preview the orb's eye (Sharingan theme) in each state, without starting the app.
+"""Preview the orb's eye themes in each level, without starting the app.
 
-    uv run python tools/preview_orb.py [largura] [linhas]
-    uv run --with pillow python tools/preview_orb.py 40 12 --png sharingan.png
+    uv run python tools/preview_orb.py [largura] [linhas] [--tema sharingan,hal]
+    uv run --with pillow python tools/preview_orb.py 40 12 --png olhos.png
 
-Without --png it prints the braille text; with --png it draws the dots, in color,
-side by side on a dark background.
+Without --png it prints the braille text; with --png it draws the dots, in color, on
+a dark background: one row per theme, one column per level (planning, execution,
+elevated). Without --tema it shows every eye.
 """
 
 import sys
 
 from rich.console import Console
+from textual.color import Color
+from toad.widgets.iris_eyes import EYES, EyeTheme
 from toad.widgets.iris_orb import IrisOrb, OrbState
 
 STATES = (
-    ("planejamento", OrbState(connected=True, planning=True), 0.0),
-    ("execução", OrbState(connected=True, planning=False), 0.0),
-    ("mangekyō", OrbState(connected=True, planning=False, elevated=True), 1.0),
+    (OrbState(connected=True, planning=True), 0.0),
+    (OrbState(connected=True, planning=False, busy=True), 0.0),
+    (OrbState(connected=True, planning=False, busy=True, elevated=True), 1.0),
 )
 BACKGROUND = (18, 18, 24)
 DOT = 6
 """Pixels per braille dot."""
 
 
-def render(state: OrbState, elevation: float, width: int, rows: int):
+def render(eye: EyeTheme, level: int, width: int, rows: int):
+    state, elevation = STATES[level]
     orb = IrisOrb()
     orb._elapsed = 10.0
     orb._angle = 0.6
     orb._state = state
     orb._elevation = elevation
+    orb._activity = 1.0 if state.busy else 0.0
+    target = Color.parse((eye.plan_color, eye.exec_color, eye.elevated_color)[level])
     # Settle the color on the state's target, as the running app would.
     for _ in range(60):
-        orb._color = orb._color.blend(_target(state, elevation), 0.3)
-    return orb._render_eye(width, rows)
+        orb._color = orb._color.blend(target, 0.3)
+    return orb._render_eye(width, rows, eye)
 
 
-def _target(state: OrbState, elevation: float):
-    from textual.color import Color
-    from toad.widgets import iris_orb
-
-    if elevation > 0.5:
-        return Color.parse(iris_orb.MANGEKYO_COLOR)
-    if state.planning:
-        return Color.parse(iris_orb.SHARINGAN_PLAN_COLOR)
-    return Color.parse(iris_orb.SHARINGAN_EXEC_COLOR)
-
-
-def save_png(path: str, width: int, rows: int) -> None:
+def save_png(path: str, eyes: list[EyeTheme], width: int, rows: int) -> None:
     from PIL import Image, ImageDraw
 
     console = Console(color_system="truecolor")
     gap = 4 * DOT
+    label = 3 * DOT
     panel_w, panel_h = width * 2 * DOT, rows * 4 * DOT
+    columns = len(STATES)
     image = Image.new(
-        "RGB", (len(STATES) * panel_w + (len(STATES) + 1) * gap, panel_h + 2 * gap), BACKGROUND
+        "RGB",
+        (columns * panel_w + (columns + 1) * gap, len(eyes) * (panel_h + gap + label) + gap),
+        BACKGROUND,
     )
     draw = ImageDraw.Draw(image)
-    for panel, (_title, state, elevation) in enumerate(STATES):
-        text = render(state, elevation, width, rows)
-        left = gap + panel * (panel_w + gap)
-        row = col = 0
-        for offset, char in enumerate(text.plain):
-            if char == "\n":
-                row, col = row + 1, 0
-                continue
-            code = ord(char) - 0x2800
-            if 0 < code < 256:
-                style = text.get_style_at_offset(console, offset)
-                color = style.color.get_truecolor() if style.color else (255, 255, 255)
-                for dy, bits in enumerate(((0x01, 0x08), (0x02, 0x10), (0x04, 0x20), (0x40, 0x80))):
-                    for dx, bit in enumerate(bits):
-                        if code & bit:
-                            x = left + (col * 2 + dx) * DOT
-                            y = gap + (row * 4 + dy) * DOT
-                            draw.ellipse((x + 1, y + 1, x + DOT - 1, y + DOT - 1), fill=tuple(color))
-            col += 1
+    for line, eye in enumerate(eyes):
+        top = gap + line * (panel_h + gap + label)
+        for level in range(columns):
+            left = gap + level * (panel_w + gap)
+            phase = "planejamento" if level == 0 else eye.labels[level]
+            draw.text((left, top), f"{eye.title} · {phase}", fill=(200, 200, 210))
+            text = render(eye, level, width, rows)
+            row = col = 0
+            for offset, char in enumerate(text.plain):
+                if char == "\n":
+                    row, col = row + 1, 0
+                    continue
+                code = ord(char) - 0x2800
+                if 0 < code < 256:
+                    style = text.get_style_at_offset(console, offset)
+                    color = style.color.get_truecolor() if style.color else (255, 255, 255)
+                    for dy, bits in enumerate(((0x01, 0x08), (0x02, 0x10), (0x04, 0x20), (0x40, 0x80))):
+                        for dx, bit in enumerate(bits):
+                            if code & bit:
+                                x = left + (col * 2 + dx) * DOT
+                                y = top + label + (row * 4 + dy) * DOT
+                                draw.ellipse((x + 1, y + 1, x + DOT - 1, y + DOT - 1), fill=tuple(color))
+                col += 1
     image.save(path)
     print(path)
 
 
 def main() -> None:
-    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
-    width = int(args[0]) if len(args) > 0 else 30
-    rows = int(args[1]) if len(args) > 1 else 9
-    if "--png" in sys.argv:
-        save_png(sys.argv[sys.argv.index("--png") + 1], width, rows)
+    argv = sys.argv[1:]
+    options = {}
+    for flag in ("--png", "--tema"):
+        if flag in argv:
+            index = argv.index(flag)
+            options[flag] = argv[index + 1]
+            del argv[index : index + 2]
+    width = int(argv[0]) if len(argv) > 0 else 30
+    rows = int(argv[1]) if len(argv) > 1 else 9
+    names = options.get("--tema")
+    eyes = [EYES[name.strip()] for name in names.split(",")] if names else list(EYES.values())
+    if "--png" in options:
+        save_png(options["--png"], eyes, width, rows)
         return
-    for title, state, elevation in STATES:
-        print(f"--- {title} ---")
-        print(render(state, elevation, width, rows).plain)
+    for eye in eyes:
+        for level in range(len(STATES)):
+            print(f"--- {eye.title} · nível {level} ---")
+            print(render(eye, level, width, rows).plain)
 
 
 if __name__ == "__main__":
