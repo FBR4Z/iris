@@ -415,7 +415,7 @@ def projeto_mcp(
     """Liga um servidor MCP ao projeto: um comando (stdio) ou uma URL (http).
 
     \b
-    iris projeto mcp Estufa esp-idf -- eim run "idf.py mcp-server"
+    iris projeto mcp Estufa esp-idf -- python tools\\esp_idf_mcp.py C:\\esp\\estufa
     iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
     """
     from toad.iris_projects import ProjectError, parse_mcp_command, save_projects

@@ -53,6 +53,12 @@ def carregar_ambiente(perfil: str) -> None:
     os.environ.update({item["n"]: item["v"] or "" for item in variaveis})
     # Sem isso o esptool (flash) aborta num console que não é UTF-8.
     os.environ["PYTHONUTF8"] = "1"
+    # Gravação paciente: espera o botão BOOT (esptool-iris.cfg) e usa 115200, que não
+    # trava o driver do CP210x no Windows como o padrão de 460800. Valores já definidos
+    # no ambiente têm prioridade.
+    cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "esptool-iris.cfg")
+    os.environ.setdefault("ESPTOOL_CFGFILE", cfg)
+    os.environ.setdefault("ESPBAUD", "115200")
 
 
 def subprocessos_sem_stdin() -> None:

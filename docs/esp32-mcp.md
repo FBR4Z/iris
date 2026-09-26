@@ -40,6 +40,26 @@ C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe -m pip install "mcp[cli]<
 Conferido em 26/09/2026 com o `hello_world`: `set_target esp32` em ~40 s e `build_project` em
 ~65 s pela ferramenta MCP.
 
+## Na prática: Maty403 sozinho
+
+Testado com um projeto real (ESP32 + CP210x, 26/09/2026): o
+[Maty403/esp-idf-mcp](https://github.com/Maty403/esp-idf-mcp) já cobre build, flash, `set_target`,
+leitura do chip **e** o monitor, roda no Windows sem o lançador acima (acha o ESP-IDF sozinho,
+usa `stdin=DEVNULL` e grava a 115200). Dois servidores com as mesmas ferramentas confundem o
+agente, então o projeto usa só ele:
+
+```powershell
+git clone https://github.com/Maty403/esp-idf-mcp C:\ferramentas\esp-idf-mcp
+iris projeto mcp Estufa esp32 -e "ESPTOOL_CFGFILE=C:\caminho\da\iris\tools\esptool-iris.cfg" -- C:\Espressif\tools\python\v6.1\venv\Scripts\python.exe C:\ferramentas\esp-idf-mcp\esp_idf_mcp.py
+```
+
+**Placas que só gravam com o botão BOOT.** Se o circuito de auto-gravação não leva o GPIO0 a
+nível baixo (comum com o DevKit numa placa de apoio), o esptool reinicia a placa mas ela sobe no
+app ("No serial data received"). O `tools/esptool-iris.cfg` (`connect_attempts = 80`) faz a
+gravação insistir por ~2 minutos: basta segurar o BOOT ~3 s a qualquer momento. Vale pôr na
+descrição do projeto que o agente deve avisar o usuário antes do `flash_project`. Evite 460800
+com o CP210x: travou o driver (Write timeout), que só voltou desconectando o USB.
+
 ## Avaliação
 
 | # | Servidor | Faz | Avaliação |
