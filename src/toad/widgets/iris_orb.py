@@ -469,8 +469,8 @@ class IrisOrb(Widget):
         tomoe = 1 if self._state.planning else 3
         pupil = 0.17 * (1 + 0.5 * self._voice_level * self._state.speaking)
         ring = 0.58
-        head = 0.21
-        tail_arc = 1.0
+        head = 0.17
+        tail_arc = 1.1
 
         def is_gap(r: float, theta: float) -> bool:
             if mangekyo:
@@ -481,7 +481,7 @@ class IrisOrb(Widget):
                 sector = TAU / 3
                 offset = (phi + sector / 2) % sector - sector / 2
                 return r < 0.93 and abs(offset) < 0.6 * (1 - r) ** 0.7 + 0.08
-            if r < pupil or abs(r - ring) < 0.045:
+            if r < pupil or abs(r - ring) < 0.035:
                 return True
             for index in range(tomoe):
                 angle = rotation + index * TAU / tomoe
@@ -490,11 +490,11 @@ class IrisOrb(Widget):
                 )
                 if distance < head:
                     return True
-                # The comma's tail trails behind the head, drifting outwards.
+                # The comma's tail hugs the ring behind the head, thinning to a point.
                 behind = (angle - theta) % TAU
                 if behind < tail_arc:
                     along = behind / tail_arc
-                    if abs(r - (ring + 0.12 * along)) < head * 0.75 * (1 - along) + 0.02:
+                    if abs(r - (ring + 0.1 * along)) < head * 0.75 * (1 - along) ** 1.2:
                         return True
             return False
 
