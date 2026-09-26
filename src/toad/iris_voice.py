@@ -48,16 +48,19 @@ permissao = Preciso da sua permissão.
 plano =
 concluido = Pronto. Terminei em {duracao}.
 erro = Algo deu errado.
+limite = Você já usou {percentual} por cento do limite {janela}.
+limite_atingido = Limite de uso atingido.
 tchau = Até logo.
 """
 """One event per line: `event = phrase`. An empty phrase silences that event."""
 
 PHRASE_HELP = (
     "Uma linha por evento, no formato evento = frase. Deixe a frase vazia para silenciar. "
-    "Variáveis: {saudacao} {nome} {agente} {modo} {programa} {arquivo} {etapas} {duracao}. "
+    "Variáveis: {saudacao} {nome} {agente} {modo} {programa} {arquivo} {etapas} {duracao} "
+    "{percentual} {janela}. "
     "Eventos: saudacao, conectado, falha, modo_planejamento, modo_execucao, trabalhando, "
     "executando, editando, apagando, movendo, lendo, pesquisando, web, permissao, plano, "
-    "concluido, erro, tchau."
+    "concluido, erro, limite, limite_atingido, tchau."
 )
 
 PROGRAMS = {

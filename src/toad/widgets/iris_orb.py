@@ -74,13 +74,14 @@ class IrisOrb(Widget):
     DEFAULT_CSS = """
     IrisOrb {
         width: 1fr;
-        height: 11;
+        height: 12;
         background: transparent;
     }
     """
 
     FPS = 24
-    LABEL_LINES = 2
+    LABEL_LINES = 3
+    """Phase and status, mode name, subscription usage."""
 
     def __init__(
         self,
@@ -410,4 +411,37 @@ class IrisOrb(Widget):
         )
         label.append("\n")
         label.append((state.mode_name or " ").center(width), Style(dim=True))
+        label.append("\n")
+        label.append(self._render_usage(width))
         return label
+
+    def _render_usage(self, width: int) -> Text:
+        """Subscription usage (e.g. "5h 17% ↻14:00 · semana 9%"), colored by level."""
+        from toad.iris_usage import usage_segments
+
+        limits = getattr(self.app, "iris_rate_limits", None)
+        show = self._setting("iris.show_usage", "true")
+        if limits is None or str(show).lower() in ("false", "0"):
+            return Text(" ")
+        segments = usage_segments(limits)
+        if sum(len(text) for text, _ in segments) > width:
+            segments = usage_segments(limits, compact=True)
+        styles = {
+            "ok": Style(),
+            "dim": Style(dim=True),
+            "warn": Style(
+                color=self._parse_color(
+                    "iris.attention_color", DEFAULT_ATTENTION_COLOR
+                ).rich_color,
+                bold=True,
+            ),
+            "danger": Style(
+                color=self._parse_color("iris.error_color", DEFAULT_ERROR_COLOR).rich_color,
+                bold=True,
+            ),
+        }
+        length = sum(len(text) for text, _ in segments)
+        usage = Text(" " * max((width - length) // 2, 0), no_wrap=True, overflow="crop")
+        for text, level in segments:
+            usage.append(text, styles.get(level, Style()))
+        return usage

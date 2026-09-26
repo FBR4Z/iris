@@ -120,6 +120,36 @@ async def test_prompt_round_trip_with_fake_agent():
         assert await wait_until(pilot, lambda: conversation.turn == "client" and conversation._turn_count >= 1)
         # The orb registered the finished turn (the "concluído" label itself only lasts 2.5 s).
         assert await wait_until(pilot, lambda: orb._turn_done_at is not None)
+        # The fake agent reports Claude-style subscription limits.
+        assert await wait_until(pilot, lambda: "5h 83%" in orb.render().plain)
+        assert "semana 12%" in orb.render().plain
+
+
+async def test_usage_announced_once(spoken):
+    write_settings({"voz": {"modo": "avisos"}})
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start_conversation(pilot)
+        for _ in range(2):
+            conversation.prompt.append("olá")
+            conversation.prompt.prompt_text_area.action_submit()
+            turns = conversation._turn_count
+            assert await wait_until(pilot, lambda: conversation._turn_count > turns)
+        warnings = [text for text in spoken if "limite" in text]
+        assert warnings == ["Você já usou 80 por cento do limite de cinco horas."]
+
+
+async def test_usage_can_be_hidden():
+    write_settings({"iris": {"show_usage": False}})
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start_conversation(pilot)
+        orb = app.screen.query_one(IrisOrb)
+        conversation.prompt.append("olá")
+        conversation.prompt.prompt_text_area.action_submit()
+        assert await wait_until(pilot, lambda: app.iris_rate_limits is not None)
+        await pilot.pause(0.2)
+        assert "5h" not in orb.render().plain
 
 
 async def test_slash_fechar_closes_session():

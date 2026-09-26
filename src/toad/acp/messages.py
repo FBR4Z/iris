@@ -15,6 +15,7 @@ from toad.acp.encode_tool_call_id import encode_tool_call_id
 if TYPE_CHECKING:
     from textual.content import Content
     from toad.acp.agent import Mode
+    from toad.iris_usage import RateLimits
     from toad.widgets.terminal_tool import ToolState
 
 
@@ -31,6 +32,13 @@ class Thinking(AgentMessage):
 @dataclass
 class UpdateStatusLine(AgentMessage):
     status_line: str | Content
+
+
+@dataclass
+class RateLimitUpdate(AgentMessage):
+    """Subscription usage limits reported by the agent (e.g. Claude's 5h / weekly)."""
+
+    limits: RateLimits
 
 
 @dataclass

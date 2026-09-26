@@ -1,3 +1,5 @@
+import sys
+
 from toad.settings import SchemaDict
 
 SCHEMA: list[SchemaDict] = [
@@ -268,15 +270,15 @@ SCHEMA: list[SchemaDict] = [
                 "key": "command",
                 "title": "Shell command",
                 "type": "string",
-                "help": "Command used to launch your shell on macOS.\n[bold]Note:[/] Requires restart.",
-                "default": "/bin/sh",
+                "help": "Command used to launch your shell (on Windows: powershell.exe, pwsh, cmd.exe or Git Bash's bash.exe).\n[bold]Note:[/] Requires restart.",
+                "default": "powershell.exe -NoLogo" if sys.platform == "win32" else "/bin/sh",
             },
             {
                 "key": "command_start",
                 "title": "Startup commands",
                 "type": "text",
                 "help": "Command(s) to run on shell start.",
-                "default": 'PS1=""',
+                "default": "" if sys.platform == "win32" else 'PS1=""',
             },
             {
                 "key": "warn_dangerous",
@@ -422,6 +424,13 @@ SCHEMA: list[SchemaDict] = [
                 "help": "Palavras, separadas por vírgula, que identificam um modo de planejamento pelo id ou nome do modo do agente.",
                 "type": "string",
                 "default": "plan, read-only",
+            },
+            {
+                "key": "show_usage",
+                "title": "Mostrar uso da assinatura?",
+                "help": "Mostra embaixo do círculo quanto dos limites da assinatura (5 horas e semana) já foi usado e quando o de 5 horas volta. Hoje só o Claude informa isso.",
+                "type": "boolean",
+                "default": True,
             },
             {
                 "key": "agents",

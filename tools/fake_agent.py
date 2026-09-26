@@ -11,6 +11,9 @@ import sys
 import time
 
 SESSION = "fake-session"
+# Fixed per run, like the real reset times.
+FIVE_HOUR_RESET = time.time() + 3600
+SEVEN_DAY_RESET = time.time() + 5 * 86400
 REPLY = (
     "## Resultado\n\nAnalisei o projeto e encontrei **dois problemas** em `main.py`.\n\n"
     "```python\nprint('oi')\n```\n\nQuer que eu corrija?"
@@ -73,6 +76,29 @@ def main() -> None:
         elif method == "session/set_mode":
             send({"jsonrpc": "2.0", "id": request_id, "result": {}})
         elif method == "session/prompt":
+            # Same shape Claude Code sends: context use plus the subscription limits.
+            update(
+                {
+                    "sessionUpdate": "usage_update",
+                    "used": 23206,
+                    "size": 200000,
+                    "_meta": {
+                        "_claude/rateLimit": {
+                            "status": "allowed",
+                            "unifiedWindows": {
+                                "five_hour": {
+                                    "utilization": 0.83,
+                                    "resetsAt": FIVE_HOUR_RESET,
+                                },
+                                "seven_day": {
+                                    "utilization": 0.12,
+                                    "resetsAt": SEVEN_DAY_RESET,
+                                },
+                            },
+                        }
+                    },
+                }
+            )
             update(
                 {
                     "sessionUpdate": "tool_call",

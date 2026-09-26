@@ -116,6 +116,22 @@ A pasta onde você abre a Íris é o projeto que o agente enxerga.
 | `/toad:rename <nome>` | Renomeia a sessão |
 | `/toad:session-new` | Nova sessão na mesma pasta |
 
+### Shell embutido
+
+Comece a linha com `!` (ou digite um comando conhecido, como `git`) para rodá-la num PowerShell dentro da Íris, sem sair da conversa: `!git status`, `!npm test`, `!cd src`. A saída aparece num terminal ao vivo na conversa, o `cd` muda a pasta do projeto e **Ctrl+C** interrompe o comando em andamento.
+
+No Windows ele roda num pseudo-terminal (ConPTY, via [pywinpty](https://github.com/andfoy/pywinpty)). O padrão é `powershell.exe -NoLogo`; em *Configurações → Shell settings → Shell command* dá para trocar por `pwsh`, `cmd.exe` ou o `bash.exe` do Git.
+
+### Uso da assinatura
+
+Com o Claude, embaixo do círculo aparece quanto dos limites da assinatura você já usou:
+
+```
+5h 17% ↻14:00 · semana 9%
+```
+
+`5h` é a janela de 5 horas (com o horário em que ela zera) e `semana` é o limite semanal. O texto fica amarelo a partir de 70% e vermelho a partir de 90%; quando o limite estoura, aparece **limite atingido** e o horário da volta. Com a voz em modo de avisos, a Íris avisa uma vez ao passar de 80% e de 95%. Os números vêm do próprio Claude Code a cada resposta; Codex e Gemini ainda não informam isso. Para esconder, desmarque *Configurações → Íris → Mostrar uso da assinatura*.
+
 ## Voz
 
 Em **Configurações → Voz → Modo**:
@@ -141,6 +157,8 @@ Em **Configurações → Voz → Modo**:
 | `permissao` | agente pede permissão | "Preciso da sua permissão." |
 | `concluido` | terminou (após N segundos) | "Pronto. Terminei em 1 minuto." |
 | `erro` / `tchau` | recusa ou limite / ao sair | "Algo deu errado." / "Até logo." |
+| `limite` | uso da assinatura passou de 80% / 95% | "Você já usou 80 por cento do limite de cinco horas." |
+| `limite_atingido` | limite da assinatura estourou | "Limite de uso atingido." |
 | `trabalhando`, `lendo`, `pesquisando`, `plano` | — | silenciados por padrão |
 
 ### Comandos de voz
@@ -170,7 +188,7 @@ Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; g
 
 Além das do Toad, em **Configurações**:
 
-- **Íris** — cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; agentes mostrados na tela inicial.
+- **Íris** — cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
 - **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, só CPU, envio automático do ditado.
 
 O arquivo fica em `%USERPROFILE%\.config\toad\toad.json`.
@@ -195,6 +213,8 @@ Arquivos principais do fork:
 |---|---|
 | `src/toad/widgets/iris_orb.py` | o círculo |
 | `src/toad/iris_voice.py` | cliente da voz, mapa de eventos, resumo falado |
+| `src/toad/iris_usage.py` | limites da assinatura (5 h / semana) embaixo do círculo |
+| `src/toad/shell.py` | shell embutido (pty no Linux/macOS, ConPTY no Windows) |
 | `src/toad/iris_theme.py` | tema |
 | `src/toad/iris_i18n.py` | tradução do rodapé |
 | `src/toad/iris_crash.py` | registro de falhas |
@@ -207,7 +227,7 @@ Arquivos principais do fork:
 uv run pytest
 ```
 
-São ~30 testes (funções da voz, círculo, bordas, tela inicial, tradução, sessões, avisos falados) que rodam a Íris sem tela, com o agente falso — não gastam cota nem tocam nas suas configurações. Rodam também no GitHub Actions (Windows e Linux) a cada envio. Vale rodar depois de puxar atualizações do Toad.
+São ~90 testes (funções da voz, círculo, bordas, tela inicial, tradução, sessões, avisos falados, uso da assinatura, shell embutido) que rodam a Íris sem tela, com o agente falso — não gastam cota nem tocam nas suas configurações. Rodam também no GitHub Actions (Windows e Linux) a cada envio. Vale rodar depois de puxar atualizações do Toad.
 
 ## Solução de problemas
 
@@ -218,7 +238,6 @@ São ~30 testes (funções da voz, círculo, bordas, tela inicial, tradução, s
 
 ### Limitações conhecidas no Windows
 
-- O shell embutido do Toad (`!comando`) ainda não funciona (falta suporte a pseudo-terminal; plano: `pywinpty`).
 - Comandos executados pelo agente não aparecem num terminal ao vivo dentro da Íris.
 - Os botões de instalar agentes na tela inicial usam comandos Unix; instale pelo terminal (tabela acima).
 

@@ -353,6 +353,10 @@ class Agent(AgentBase):
                     case _:
                         self._context_usage = ContextUsage(used, size)
                 self.update_status_line()
+                from toad.iris_usage import parse_rate_limits
+
+                if (limits := parse_rate_limits(update.get("_meta"))) is not None:
+                    self.post_message(messages.RateLimitUpdate(limits))
 
     def update_status_line(self) -> None:
         """Update the current status line."""

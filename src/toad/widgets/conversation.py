@@ -728,6 +728,8 @@ class Conversation(containers.Vertical):
     async def on_unmount(self) -> None:
         if self._directory_watcher is not None:
             self._directory_watcher.stop()
+        if self._shell is not None:
+            self._shell.close()
         if self.agent is not None:
             await self.agent.stop()
 
@@ -950,6 +952,29 @@ class Conversation(containers.Vertical):
     @on(acp_messages.UpdateStatusLine)
     async def on_update_status_line(self, message: acp_messages.UpdateStatusLine):
         self.status = message.status_line
+
+    @on(acp_messages.RateLimitUpdate)
+    def on_acp_rate_limit_update(self, message: acp_messages.RateLimitUpdate):
+        from toad.iris_usage import SPOKEN_WINDOWS, crossed_levels
+
+        # Limits belong to the account, not the session: keep them on the app so the
+        # orb shows them in every session.
+        self.app.iris_rate_limits = message.limits
+        announced = self.app.iris_usage_announced
+        crossed = crossed_levels(message.limits, announced)
+        if (voice := self._iris_voice()) is not None:
+            if message.limits.limited:
+                key = ("limited", 1.0, message.limits.resets_at)
+                if key not in announced:
+                    announced.add(key)
+                    voice.announce("limite_atingido")
+            elif crossed:
+                window, value = max(crossed, key=lambda item: item[1])
+                voice.announce(
+                    "limite",
+                    janela=SPOKEN_WINDOWS.get(window.key, ""),
+                    percentual=round(value * 100),
+                )
 
     @on(acp_messages.Update)
     async def on_acp_agent_message(self, message: acp_messages.Update):

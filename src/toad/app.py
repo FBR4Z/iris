@@ -307,6 +307,13 @@ class ToadApp(App, inherit_bindings=False):
         self._session_tracker = SessionTracker(self.session_update_signal)
         self.temporary_background_screen: Screen | None = None
 
+        from toad.iris_usage import RateLimits
+
+        self.iris_rate_limits: RateLimits | None = None
+        """Latest subscription limits reported by an agent (shown under the orb)."""
+        self.iris_usage_announced: set[tuple[str, float, float | None]] = set()
+        """Usage levels Íris has already spoken, so each one is said once per reset."""
+
         super().__init__()
         self.project_dir = Path(project_dir or "./").expanduser().resolve()
         self.start_time = monotonic()
