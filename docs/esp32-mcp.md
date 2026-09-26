@@ -88,9 +88,21 @@ iris projeto mcp Estufa esp-idf -- C:\Espressif\tools\python\v6.1\venv\Scripts\p
 iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
 iris projeto mcp Estufa esp-monitor -- python C:\ferramentas\esp-idf-mcp\esp_idf_mcp.py
 
-# MicroPython (use o Python do Thonny)
-iris projeto mcp Horta thonny -- "C:\Program Files (x86)\Thonny\python.exe" -m thonny_ai_mcp
+# MicroPython (use o Python do Thonny; o instalador por usuário fica em %LOCALAPPDATA%)
+iris projeto mcp Horta thonny -- "$env:LOCALAPPDATA\Programs\Thonny\python.exe" -m thonny_ai_mcp
 ```
+
+Para instalar o plugin, feche o Thonny e instale no Python dele (assim o Thonny e o servidor MCP
+enxergam o mesmo pacote):
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Thonny\python.exe" -m pip install git+https://github.com/AstroQuestStudio/thonny-ai
+```
+
+Com o Thonny fechado, o servidor usa a porta serial direto e escolhe sozinho a placa. Se houver
+outra placa ESP32 ligada (com ESP-IDF, por exemplo), desligue esse recurso no projeto com a
+variável `THONNY_AI_SERIAL_FALLBACK=0` em `env` do servidor, em `iris-projetos.json`: o agente só
+fala com a placa pelo Thonny aberto, na porta escolhida nele.
 
 O servidor ativo aparece no contexto que a Íris manda ao agente no primeiro pedido
 ("Servidores MCP ligados a esta sessão: ...").
