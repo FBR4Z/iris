@@ -83,6 +83,11 @@ PATTERNS: list[tuple[str, str]] = [
     (r"\bnova sess(ao)\b|\babre? (uma )?(nova )?sess(ao)\b", "nova_sessao"),
     (r"\b(proxima|seguinte) sess(ao)\b", "proxima_sessao"),
     (r"\bsess(ao)? anterior\b|\bvolta(r)? (a )?sess(ao)\b", "sessao_anterior"),
+    # Projects: before "abrir", which would take "abre o projeto" for an agent.
+    (r"\b(que|qual) (e o )?projeto\b.*\b(estou|esta|atual|esse|este)\b|\bprojeto atual\b", "projeto_atual"),
+    (r"\b(cria(r)?|crie|faz(er)?|novo)( um)?( novo)? projeto( chamado| com o nome( de)?| de nome)? (?P<arg>.+)$", "criar_projeto"),
+    (r"\b(abr(e|ir)|entra(r)?|vai|ir)( para| pro| no| na| em)?( o| a)? projeto (?P<arg>.+)$", "abrir_projeto"),
+    (r"\bprojetos\b", "listar_projetos"),
     (r"\b(abr(e|ir)|inicia(r)?|chama(r)?|usa(r)?)( o| a)? (\w+)", "abrir"),
     (r"\b(envia(r)?|manda(r)?|pode mandar)\b", "enviar"),
     (r"\b(apaga(r)?|limpa(r)?)( o)? (texto|prompt|campo)\b|\bapaga tudo\b", "limpar"),
@@ -98,6 +103,8 @@ PATTERNS: list[tuple[str, str]] = [
 HELP_TEXT = (
     "Diga Íris e um comando: modo planejamento, modo execução, abrir o Claude, "
     "o Codex ou o Gemini, nova sessão, próxima sessão, sessão anterior, fechar sessão, "
+    "quais são os meus projetos, abrir o projeto NOME, criar um projeto chamado NOME, "
+    "em que projeto estou, "
     "enviar, limpar o texto, parar, silêncio, repetir, que horas são, status, ou sair."
 )
 
@@ -111,6 +118,14 @@ def parse_command(text: str) -> Command | None:
         return Command("vazio")
     for pattern, name in PATTERNS:
         if match := re.search(pattern, rest):
+            if name == "abrir_projeto":
+                return Command(name, match.group("arg").strip())
+            if name == "criar_projeto":
+                # The name as spoken (accents, capitals), not the normalized text.
+                count = len(match.group("arg").split())
+                words = re.findall(r"[^\W_][\w-]*", text)[-count:]
+                spoken_name = " ".join(words)
+                return Command(name, spoken_name[:1].upper() + spoken_name[1:])
             if name == "abrir":
                 target = match.group(match.lastindex or 0)
                 identity = next(
@@ -123,6 +138,67 @@ def parse_command(text: str) -> Command | None:
                 return Command("abrir", identity)
             return Command(name)
     return Command("desconhecido", rest)
+
+
+def spoken_list(names: list[str]) -> str:
+    """'A', 'A e B', 'A, B e C'."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " e " + names[-1]
+
+
+async def run_project_command(
+    app: ToadApp, command: Command, conversation: Conversation | None
+) -> str | None:
+    """"Íris, quais são os meus projetos / abre o projeto X / cria um projeto chamado X"."""
+    from toad import iris_projects
+
+    projects = iris_projects.load_projects()
+    names = [project.nome for project in projects]
+    try:
+        match command.name:
+            case "listar_projetos":
+                if not projects:
+                    return "Você ainda não tem projetos. Diga: Íris, cria um projeto chamado, e o nome."
+                app.notify(
+                    "\n".join(
+                        f"• {project.nome} — {project.main_folder or 'sem pasta'}"
+                        for project in projects
+                    ),
+                    title="Projetos",
+                    timeout=10,
+                )
+                plural = "projeto" if len(names) == 1 else "projetos"
+                return f"Você tem {len(names)} {plural}: {spoken_list(names)}."
+            case "projeto_atual":
+                if conversation is None or conversation.iris_project is None:
+                    return "Esta sessão não está em nenhum projeto."
+                return f"Você está no projeto {conversation.iris_project.nome}."
+            case "abrir_projeto":
+                project = iris_projects.match_project(projects, command.argument)
+                if project is None:
+                    known = f" Seus projetos são {spoken_list(names)}." if names else ""
+                    return f"Não encontrei o projeto {command.argument}.{known}"
+                current = conversation._agent_data if conversation is not None else None
+                fallback = current["identity"] if current else "claude.com"
+                iris_projects.open_project(
+                    app, project, iris_projects.project_agent(project, fallback)
+                )
+                return f"Abrindo o projeto {project.nome}."
+            case "criar_projeto":
+                if conversation is None:
+                    return "Abra uma conversa na pasta do projeto e peça de novo."
+                project = iris_projects.new_project(
+                    projects, command.argument, "", [conversation.project_path]
+                )
+                iris_projects.save_projects(projects)
+                conversation.iris_project = project
+                conversation.update_title()
+                return (
+                    f"Projeto {project.nome} criado com a pasta {conversation.project_path.name}. "
+                    "A descrição e outras pastas você ajusta com barra projeto."
+                )
+    except iris_projects.ProjectError as error:
+        return str(error)
+    return None
 
 
 async def run_command(
@@ -206,6 +282,8 @@ async def run_command(
             return None
         case "repetir":
             return voice.last_spoken or "Ainda não falei nada."
+        case "listar_projetos" | "abrir_projeto" | "criar_projeto" | "projeto_atual":
+            return await run_project_command(app, command, conversation)
         case "horas":
             now = datetime.now()
             return f"São {now.hour} horas e {now.minute} minutos."

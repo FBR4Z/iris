@@ -240,3 +240,35 @@ async def test_voice_off_by_default_says_nothing(spoken):
         conversation.current_mode = conversation.modes["plan"]
         await pilot.pause(0.2)
         assert spoken == []
+
+
+async def test_launcher_lists_projects(tmp_path):
+    from toad.iris_projects import Project, save_projects
+    from toad.screens.store import ProjectItem, ProjectList
+
+    folder = tmp_path / "mestrado"
+    folder.mkdir()
+    app = ToadApp(mode="store", agent_data=None, project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        assert await wait_until(pilot, lambda: app.screen.query_one_optional(ProjectList))
+        assert "Nenhum projeto ainda" in str(app.screen.query_one(ProjectList).query_one(".no-agents").render())
+
+        # Created while the screen was away: read again when it comes back.
+        save_projects([Project("Mestrado", "Dissertação", [str(folder)], agente="claude")])
+        await app.screen.query_one(ProjectList).recompose()
+        (item,) = app.screen.query(ProjectItem)
+        assert item.project.nome == "Mestrado"
+
+        launched = []
+
+        def launch_agent(identity, **kwargs):
+            launched.append((identity, kwargs.get("project_path")))
+
+        app.launch_agent = launch_agent  # don't start the real Claude Code
+        grid = app.screen.query_one("#projects-grid-select")
+        grid.focus()
+        grid.highlighted = 0
+        await pilot.press("enter")
+        assert await wait_until(pilot, lambda: launched)
+        assert launched == [("claude.com", folder)]
+        assert app.iris_project_preferred == "Mestrado"

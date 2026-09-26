@@ -102,8 +102,17 @@ StoreScreen {
         border: none;
     }
     
-    AgentItem {
-        height: auto;             
+    ProjectList .no-agents {
+        text-style: dim italic;
+        padding: 0 2;
+    }
+    ProjectItem #description {
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    AgentItem, ProjectItem {
+        height: auto;
         border: tall transparent;
         padding: 0 1    ;        
         &:hover {

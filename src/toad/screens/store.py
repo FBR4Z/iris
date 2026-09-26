@@ -290,6 +290,69 @@ class LauncherItem(containers.VerticalGroup):
                 yield widgets.Static(agent["description"], id="description")
 
 
+class ProjectItem(containers.VerticalGroup):
+    """An Íris project on the start screen."""
+
+    def __init__(self, project) -> None:
+        self._project = project
+        super().__init__()
+
+    @property
+    def project(self):
+        return self._project
+
+    def compose(self) -> ComposeResult:
+        project = self._project
+        with containers.Grid():
+            yield widgets.Label(project.nome, id="name")
+            tag = pill(project.agente or "claude", "$primary-muted 50%", "$text-primary")
+            yield widgets.Label(tag, id="type")
+        folder = project.main_folder
+        yield widgets.Label(
+            format_path(folder, directory=True) if folder else "(nenhuma pasta encontrada)",
+            id="author",
+            markup=False,
+        )
+        yield widgets.Static(project.descricao or "Sem descrição.", id="description", markup=False)
+
+
+class ProjectGridSelect(GridSelect):
+    HELP = """\
+## Projetos
+
+- **cursor keys** Navegar
+- **enter / space** Abrir uma sessão no projeto
+"""
+    BINDINGS = [
+        Binding("enter", "select", "Abrir projeto", tooltip="Abrir uma sessão no projeto"),
+        Binding("space", "select", "Abrir projeto", show=False),
+    ]
+    BINDING_GROUP_TITLE = "Projetos"
+
+
+class ProjectList(containers.VerticalGroup):
+    """The "Projetos" section of the start screen (read again on every visit)."""
+
+    def compose(self) -> ComposeResult:
+        from toad.iris_projects import load_projects
+
+        projects = load_projects()
+        yield widgets.Static(
+            "[$text-warning u]Projetos[/] [$text-secondary i]Pastas, contexto e MCP de cada trabalho",
+            classes="heading",
+        )
+        if projects:
+            with ProjectGridSelect(id="projects-grid-select", min_column_width=40):
+                for project in projects:
+                    yield ProjectItem(project)
+        else:
+            yield widgets.Label(
+                "Nenhum projeto ainda. Numa sessão, use /projeto novo NOME "
+                "ou diga “Íris, cria um projeto chamado …”.",
+                classes="no-agents",
+            )
+
+
 class AgentGridSelect(GridSelect):
     HELP = """\
 ## Agent select
@@ -416,6 +479,7 @@ class StoreScreen(Screen):
         agents = self._agents
 
         yield Launcher(agents, id="launcher")
+        yield ProjectList(id="projects")
 
         ordered_agents = sorted(
             agents.values(), key=lambda agent: agent["name"].casefold()
@@ -524,6 +588,24 @@ class StoreScreen(Screen):
         await self.app.save_settings()
         if modal_response == "launch":
             self.post_message(messages.LaunchAgent(launcher_item.agent["identity"]))
+
+    @on(GridSelect.Selected, "#projects GridSelect")
+    def on_project_selected(self, event: GridSelect.Selected) -> None:
+        from toad.iris_projects import ProjectError, open_project, project_agent
+
+        item = event.widget
+        assert isinstance(item, ProjectItem)
+        launcher = self.app.settings.get("launcher.agents", str).split()
+        fallback = next((identity for identity in launcher if identity in self._agents), "claude.com")
+        try:
+            open_project(self.app, item.project, project_agent(item.project, fallback))
+        except ProjectError as error:
+            self.notify(str(error), title="Projetos", severity="error")
+
+    async def on_screen_resume(self) -> None:
+        # Projects may have been created or changed in a session since the last visit.
+        if (projects := self.query_one_optional(ProjectList)) is not None:
+            await projects.recompose()
 
     @on(ChangeDirectory)
     def on_change_directory(self, event: ChangeDirectory) -> None:

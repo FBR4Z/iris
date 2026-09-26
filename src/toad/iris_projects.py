@@ -190,6 +190,43 @@ def find_project(projects: list[Project], name: str) -> Project | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def match_project(projects: list[Project], spoken: str) -> Project | None:
+    """Find a project from a dictated name ("o mestrado", "OT modbus", "mestrad")."""
+    if project := find_project(projects, spoken):
+        return project
+    from difflib import get_close_matches
+
+    from toad.iris_commands import normalize
+
+    names = {normalize(project.nome): project for project in projects}
+    wanted = normalize(spoken)
+    for name, project in names.items():
+        if name and f" {name} " in f" {wanted} ":
+            return project
+    close = get_close_matches(wanted, list(names), n=1, cutoff=0.6)
+    return names[close[0]] if close else None
+
+
+# `agente` in the projects file is a short name.
+AGENT_IDENTITIES = {"claude": "claude.com", "codex": "openai.com", "gemini": "geminicli.com"}
+
+
+def project_agent(project: Project, fallback: str = "claude.com") -> str:
+    """Identity of the agent a project opens with (its `agente`, else `fallback`)."""
+    agent = project.agente.strip().lower()
+    return AGENT_IDENTITIES.get(agent, agent) if agent else fallback
+
+
+def open_project(app, project: Project, agent_identity: str) -> None:
+    """Start a session of `agent_identity` in the project's main folder."""
+    from toad import messages
+
+    if (folder := project.main_folder) is None:
+        raise ProjectError(f'O projeto "{project.nome}" não tem nenhuma pasta que exista.')
+    app.iris_project_preferred = project.nome
+    app.post_message(messages.SessionNew(str(folder), agent_identity, ""))
+
+
 def project_for_path(
     projects: list[Project], path: Path, preferred: str | None = None
 ) -> Project | None:

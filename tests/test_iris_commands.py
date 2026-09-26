@@ -49,6 +49,14 @@ def test_normalize():
         ("Íris, sair", Command("sair")),
         ("Ei Íris, modo planejamento", Command("modo_planejamento")),
         ("Íris.", Command("vazio")),
+        ("Íris, quais são os meus projetos?", Command("listar_projetos")),
+        ("Íris, lista os projetos", Command("listar_projetos")),
+        ("Íris, abre o projeto Mestrado.", Command("abrir_projeto", "mestrado")),
+        ("Íris, vai pro projeto OT Modbus", Command("abrir_projeto", "ot modbus")),
+        ("Íris, cria um projeto chamado Irrigação.", Command("criar_projeto", "Irrigação")),
+        ("Íris, criar novo projeto Estufa da horta", Command("criar_projeto", "Estufa da horta")),
+        ("Íris, em que projeto eu estou?", Command("projeto_atual")),
+        ("Íris, qual é o projeto atual", Command("projeto_atual")),
     ],
 )
 def test_parse_command(spoken, expected):
@@ -201,3 +209,55 @@ async def test_wake_flag_in_service_command(spoken, mode, wake):
     app = ToadApp(agent_data=agent_data(), project_dir=".")
     async with app.run_test(size=SIZE):
         assert ("--wake" in app.iris_voice._command()) is wake
+
+
+def test_match_project_from_dictation(tmp_path):
+    from toad.iris_projects import Project, match_project, project_agent
+
+    projects = [Project("Mestrado", agente="codex"), Project("OT Modbus")]
+    assert match_project(projects, "mestrado").nome == "Mestrado"
+    assert match_project(projects, "o mestrado por favor").nome == "Mestrado"
+    assert match_project(projects, "mestrad").nome == "Mestrado"
+    assert match_project(projects, "ot mod bus").nome == "OT Modbus"
+    assert match_project(projects, "estufa") is None
+    assert project_agent(projects[0]) == "openai.com"
+    assert project_agent(projects[1], "geminicli.com") == "geminicli.com"
+
+
+async def test_voice_project_commands(spoken, tmp_path):
+    from toad.iris_projects import load_projects
+
+    write_settings({"voz": {"modo": "ditado_avisos"}})
+    folder = tmp_path / "estufa"
+    folder.mkdir()
+    app = ToadApp(agent_data=agent_data(), project_dir=str(folder))
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start(pilot)
+        voice = app.iris_voice
+
+        voice.handle_transcript("Íris, quais são os meus projetos?", conversation)
+        assert await wait_until(pilot, lambda: any("ainda não tem projetos" in s for s in spoken))
+
+        voice.handle_transcript("Íris, cria um projeto chamado Estufa.", conversation)
+        assert await wait_until(pilot, lambda: any("Projeto Estufa criado" in s for s in spoken))
+        (project,) = load_projects()
+        assert project.nome == "Estufa" and project.main_folder == folder.resolve()
+        assert conversation.iris_project.nome == "Estufa"
+
+        voice.handle_transcript("Íris, em que projeto eu estou?", conversation)
+        assert await wait_until(pilot, lambda: "Você está no projeto Estufa." in spoken)
+
+        voice.handle_transcript("Íris, lista os projetos", conversation)
+        assert await wait_until(pilot, lambda: "Você tem 1 projeto: Estufa." in spoken)
+
+        voice.handle_transcript("Íris, abre o projeto Horta", conversation)
+        assert await wait_until(pilot, lambda: any("Não encontrei o projeto horta" in s for s in spoken))
+
+        launched = []
+        app.launch_agent = lambda identity, **kwargs: launched.append(
+            (identity, kwargs.get("project_path"))
+        )  # don't start the real Claude Code
+        voice.handle_transcript("Íris, abre o projeto estufa", conversation)
+        assert await wait_until(pilot, lambda: "Abrindo o projeto Estufa." in spoken)
+        assert await wait_until(pilot, lambda: launched == [("claude.com", folder.resolve())])
+        assert app.iris_project_preferred == "Estufa"
