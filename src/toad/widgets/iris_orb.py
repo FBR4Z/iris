@@ -29,6 +29,16 @@ DEFAULT_ERROR_COLOR = "#ff4d5e"
 DEFAULT_LISTEN_COLOR = "#bff3ff"
 DEFAULT_PLAN_MODES = "plan, read-only"
 DEFAULT_AGENT_COLORS = "claude=#d97757, codex=#10a37f, openai=#10a37f, gemini=#7b8cff"
+DEFAULT_ELEVATED_MODES = "bypass, yolo"
+
+THEME_ARC = "arco"
+THEME_SHARINGAN = "sharingan"
+SHARINGAN_PLAN_COLOR = "#a8101f"
+SHARINGAN_EXEC_COLOR = "#e3122d"
+MANGEKYO_COLOR = "#ff2a3f"
+
+ELEVATED_TOOLS = {"skill", "agent", "task", "activate_skill", "delegate_to_agent"}
+"""Tools that mean a skill or a sub-agent is running (Claude Code, Gemini CLI)."""
 
 BOOT_SECONDS = 1.4
 RIPPLE_SECONDS = 0.9
@@ -54,6 +64,21 @@ class OrbState:
     speaking: bool = False
     level: float = 0.0
     """Microphone or speech loudness, 0..1."""
+    elevated: bool = False
+    """A skill or sub-agent is running, or the mode skips permissions."""
+    model_name: str = ""
+
+
+def is_elevated_tool(tool_call: dict) -> bool:
+    """Is this tool call a skill or a sub-agent?"""
+    meta = tool_call.get("_meta") or {}
+    names = [
+        (meta.get("claudeCode") or {}).get("toolName") if isinstance(meta, dict) else None,
+        tool_call.get("name"),
+    ]
+    return any(
+        isinstance(name, str) and name.lower() in ELEVATED_TOOLS for name in names
+    )
 
 
 def ease_out(value: float) -> float:
@@ -109,6 +134,8 @@ class IrisOrb(Widget):
         self._ripple_start: float | None = None
         self._turn_done_at: float | None = None
         self._voice_level = 0.0
+        self._elevation = 0.0
+        """0 = normal, 1 = skill / sub-agent level; eased."""
         self._applied_accent: tuple[str, bool] | None = None
         self._booted = False
         """Set on the first tick, so the power-up plays once the app is responsive."""
@@ -129,6 +156,11 @@ class IrisOrb(Widget):
             return Color.parse(self._setting(key, default))
         except Exception:
             return Color.parse(default)
+
+    @property
+    def theme(self) -> str:
+        """Look of the orb: "arco" (arc reactor) or "sharingan"."""
+        return self._setting("iris.orb_theme", THEME_ARC).strip().lower()
 
     def _conversation(self) -> Conversation | None:
         from toad.widgets.conversation import Conversation
@@ -156,6 +188,16 @@ class IrisOrb(Widget):
             if word.strip()
         ]
         mode_id = f"{mode.id} {mode.name}".lower() if mode is not None else ""
+        elevated_words = [
+            word.strip().lower()
+            for word in self._setting(
+                "iris.elevated_modes", DEFAULT_ELEVATED_MODES
+            ).split(",")
+            if word.strip()
+        ]
+        from toad.iris_config import MODEL, by_category
+
+        model = by_category(list(getattr(conversation, "config_options", {}).values()), MODEL)
         session_state = None
         if self.screen.id is not None:
             session = self.app.session_tracker.get_session(self.screen.id)
@@ -171,6 +213,9 @@ class IrisOrb(Widget):
             turns=getattr(conversation, "_turn_count", 0),
             mode_name=mode.name if mode is not None else "",
             agent_key=agent_key.lower(),
+            elevated=bool(getattr(conversation, "iris_elevated", False))
+            or any(word in mode_id for word in elevated_words),
+            model_name=model.current_name if model is not None else "",
             **voice_state,
         )
 
@@ -200,6 +245,10 @@ class IrisOrb(Widget):
         state = self._state = self._read_state()
         if state.turns > previous.turns and not state.failed:
             self._ripple_start = self._turn_done_at = elapsed
+        if state.elevated and not previous.elevated:
+            # Going up a level: a pulse out of the core.
+            self._ripple_start = elapsed
+        sharingan = self.theme == THEME_SHARINGAN
 
         if state.listening:
             target = Color.parse(DEFAULT_LISTEN_COLOR)
@@ -207,6 +256,13 @@ class IrisOrb(Widget):
             target = self._parse_color("iris.error_color", DEFAULT_ERROR_COLOR)
         elif state.asking:
             target = self._parse_color("iris.attention_color", DEFAULT_ATTENTION_COLOR)
+        elif sharingan:
+            if state.elevated:
+                target = Color.parse(MANGEKYO_COLOR)
+            elif state.planning:
+                target = Color.parse(SHARINGAN_PLAN_COLOR)
+            else:
+                target = Color.parse(SHARINGAN_EXEC_COLOR)
         elif state.planning:
             target = self._parse_color("iris.plan_color", DEFAULT_PLAN_COLOR)
         else:
@@ -217,6 +273,7 @@ class IrisOrb(Widget):
             self._agent_target(state, target), ease
         )
         self._activity += ((1.0 if state.busy else 0.0) - self._activity) * ease
+        self._elevation += ((1.0 if state.elevated else 0.0) - self._elevation) * ease
 
         speed = 0.35 + self._activity * 3.2
         if not state.connected:
@@ -269,7 +326,10 @@ class IrisOrb(Widget):
         width = self.size.width
         label_lines = self.LABEL_LINES if self.show_label else 0
         rows = max(self.size.height - label_lines, 1)
-        text = self._render_ring(width, rows)
+        if self.theme == THEME_SHARINGAN:
+            text = self._render_eye(width, rows)
+        else:
+            text = self._render_ring(width, rows)
         if self.show_label:
             text.append(self._render_label(width))
         else:
@@ -277,7 +337,7 @@ class IrisOrb(Widget):
         return text
 
     def _render_ring(self, width: int, rows: int) -> Text:
-        elapsed, intensity = self._elapsed, self._intensity
+        elapsed = self._elapsed
         boot = ease_out(elapsed / BOOT_SECONDS)
         dots_w, dots_h = width * 2, rows * 4
         bits = [[0] * width for _ in range(rows)]
@@ -309,6 +369,9 @@ class IrisOrb(Widget):
             if (theta + math.pi / 2) % TAU > sweep:
                 continue
             tail = (head - theta) % TAU
+            if self._elevation > 0.5:
+                # Skill / sub-agent: three comets instead of one.
+                tail %= TAU / 3
             brightness = 0.25 + 0.75 * max(0.0, 1 - tail / (TAU * 0.45))
             plot(
                 center_x + radius * math.cos(theta),
@@ -360,21 +423,121 @@ class IrisOrb(Widget):
                         self._color,
                     )
 
+        return self._to_text(bits, glow, colors)
+
+    def _to_text(
+        self, bits: list[list[int]], glow: list[list[float]], colors: list[list[Color]]
+    ) -> Text:
+        """Braille canvas → colored text."""
+        intensity = self._intensity
         background = self.background_colors[1]
         text = Text(no_wrap=True, overflow="crop")
-        for y in range(rows):
-            for x in range(width):
-                cell_bits = bits[y][x]
+        for bits_row, glow_row, colors_row in zip(bits, glow, colors):
+            for cell_bits, cell_glow, cell_color in zip(bits_row, glow_row, colors_row):
                 if not cell_bits:
                     text.append(" ")
                     continue
-                level = glow[y][x] * intensity
-                color = background.blend(colors[y][x], min(level, 1.0))
+                level = cell_glow * intensity
+                color = background.blend(cell_color, min(level, 1.0))
                 if level > 0.85:
                     color = color.blend(WHITE, min((level - 0.85) * 2, 0.5))
                 text.append(chr(0x2800 + cell_bits), Style(color=color.rich_color))
             text.append("\n")
         return text
+
+    def _render_eye(self, width: int, rows: int) -> Text:
+        """Sharingan theme: a filled red iris; pupil, ring and tomoe are the dark gaps.
+
+        Planning shows one tomoe, execution three, and a skill or sub-agent turns it
+        into the Mangekyō (a three-bladed pinwheel).
+        """
+        elapsed = self._elapsed
+        boot = ease_out(elapsed / BOOT_SECONDS)
+        dots_w, dots_h = width * 2, rows * 4
+        bits = [[0] * width for _ in range(rows)]
+        glow = [[0.0] * width for _ in range(rows)]
+        colors: list[list[Color]] = [[self._color] * width for _ in range(rows)]
+        center_x, center_y = dots_w / 2, dots_h / 2
+        radius = min(dots_w, dots_h) / 2 - 1
+        if self._state.listening:
+            radius *= 0.9 + 0.1 * self._voice_level
+        if radius <= 1:
+            return self._to_text(bits, glow, colors)
+
+        rotation = self._angle
+        mangekyo = self._elevation > 0.5
+        tomoe = 1 if self._state.planning else 3
+        pupil = 0.17 * (1 + 0.5 * self._voice_level * self._state.speaking)
+        ring = 0.58
+        head = 0.21
+        tail_arc = 1.0
+
+        def is_gap(r: float, theta: float) -> bool:
+            if mangekyo:
+                if r < 0.22:
+                    return True
+                # Blades curve with the radius and taper towards the rim.
+                phi = theta - rotation + 2.4 * r
+                sector = TAU / 3
+                offset = (phi + sector / 2) % sector - sector / 2
+                return r < 0.93 and abs(offset) < 0.6 * (1 - r) ** 0.7 + 0.08
+            if r < pupil or abs(r - ring) < 0.045:
+                return True
+            for index in range(tomoe):
+                angle = rotation + index * TAU / tomoe
+                distance = math.sqrt(
+                    max(r * r + ring * ring - 2 * r * ring * math.cos(theta - angle), 0)
+                )
+                if distance < head:
+                    return True
+                # The comma's tail trails behind the head, drifting outwards.
+                behind = (angle - theta) % TAU
+                if behind < tail_arc:
+                    along = behind / tail_arc
+                    if abs(r - (ring + 0.12 * along)) < head * 0.75 * (1 - along) + 0.02:
+                        return True
+            return False
+
+        limit = radius * boot
+        for iy in range(dots_h):
+            dy = iy + 0.5 - center_y
+            if abs(dy) > limit:
+                continue
+            for ix in range(dots_w):
+                dx = ix + 0.5 - center_x
+                distance = math.hypot(dx, dy)
+                if distance > limit:
+                    continue
+                r = distance / radius
+                theta = math.atan2(dy, dx)
+                if is_gap(r, theta):
+                    continue
+                brightness = 0.45 + 0.4 * r
+                if r > 0.86:
+                    # Bright rim, with a sheen that circles faster while working.
+                    sheen = (rotation * 1.5 - theta) % TAU
+                    brightness = 0.9 + 0.3 * max(0.0, 1 - sheen / (TAU * 0.3))
+                cx, cy = ix // 2, iy // 4
+                bits[cy][cx] |= DOT_BITS[iy % 4][ix % 2]
+                if brightness > glow[cy][cx]:
+                    glow[cy][cx] = brightness
+
+        if self._ripple_start is not None:
+            progress = (elapsed - self._ripple_start) / RIPPLE_SECONDS
+            if progress >= 1:
+                self._ripple_start = None
+            else:
+                ripple = radius * (1.02 + 0.25 * ease_out(progress))
+                samples = int(TAU * ripple * 2)
+                for index in range(samples):
+                    theta = TAU * index / samples
+                    ix = int(center_x + ripple * math.cos(theta))
+                    iy = int(center_y + ripple * math.sin(theta))
+                    if 0 <= ix < dots_w and 0 <= iy < dots_h:
+                        cx, cy = ix // 2, iy // 4
+                        bits[cy][cx] |= DOT_BITS[iy % 4][ix % 2]
+                        glow[cy][cx] = max(glow[cy][cx], 1.1 * (1 - progress))
+        return self._to_text(bits, glow, colors)
 
     def _render_label(self, width: int) -> Text:
         state = self._state
@@ -396,8 +559,15 @@ class IrisOrb(Widget):
             phase, status = "aguardando você", "permissão"
         else:
             phase = "planejamento" if state.planning else "execução"
+            if self.theme == THEME_SHARINGAN:
+                if state.elevated:
+                    phase = "mangekyō"
+                elif not state.planning:
+                    phase = "sharingan"
             if state.speaking:
                 status = "falando"
+            elif state.busy and state.elevated:
+                status = "skill…"
             elif state.busy:
                 status = "trabalhando…"
             elif just_done:
@@ -410,7 +580,8 @@ class IrisOrb(Widget):
             Style(color=self._color.rich_color, bold=True),
         )
         label.append("\n")
-        label.append((state.mode_name or " ").center(width), Style(dim=True))
+        mode_line = " · ".join(name for name in (state.mode_name, state.model_name) if name)
+        label.append((mode_line or " ").center(width), Style(dim=True))
         label.append("\n")
         label.append(self._render_usage(width))
         return label

@@ -62,6 +62,8 @@ from toad.widgets.shell_terminal import ShellTerminal
 
 if TYPE_CHECKING:
     from toad.acp.agent import Mode
+    from toad.iris_config import ConfigChoice, ConfigOption
+    from toad.iris_projects import Project
     from toad.widgets.terminal import Terminal
     from toad.widgets.agent_response import AgentResponse
     from toad.widgets.agent_thought import AgentThought
@@ -101,6 +103,19 @@ Try updating to see if support has been added.
 - Repeat the process to update the ACP adapter (if required)
 
 If that fails, ask for help in [Discussions](https://github.com/batrachianai/toad/discussions)!
+""",
+    "disconnected": """\
+## O agente desconectou
+
+O agente encerrou a conexão sozinho, sem informar erro. Causas comuns:
+
+- **Conta corporativa** que bloqueia o uso pela linha de comando (ex.: Codex em um workspace
+  ChatGPT Business/Enterprise sem acesso ao Codex CLI liberado pelo administrador).
+- Login expirado: rode o agente uma vez fora da Íris (`codex`, `claude`, `gemini`) e faça login.
+- Proxy ou firewall da rede bloqueando o servidor do agente.
+
+O registro completo da conversa com o agente fica em `~/.local/state/toad/logs`.
+Abra uma nova sessão (`/toad:session-new`) para tentar de novo.
 """,
 }
 
@@ -401,11 +416,22 @@ class Conversation(containers.Vertical):
 
         self._post_lock = asyncio.Lock()
 
+        self.config_options: dict[str, ConfigOption] = {}
+        """Session options reported by the agent (model, effort...), by id."""
+        self.iris_project: Project | None = None
+        """The Íris project this session's folder belongs to."""
+        self._iris_project_told = agent_session_id is not None
+        """The agent already heard about the project (a resumed session did before)."""
+        self.iris_elevated = False
+        """A skill or sub-agent is running in this turn (the orb's "Mangekyō")."""
+
     def update_title(self) -> None:
         """Update the screen title."""
 
         if agent_title := self.agent_title:
             project_path = format_path(self.project_path)
+            if self.iris_project is not None:
+                project_path = f"[{self.iris_project.nome}] {project_path}"
             self.screen.title = f"{agent_title} {project_path}"
         else:
             self.screen.title = ""
@@ -821,6 +847,9 @@ class Conversation(containers.Vertical):
             if text.startswith("/") and await self.slash_command(text):
                 # Toad has processed the slash command.
                 return
+            if text.startswith("/"):
+                # An agent command or skill: the orb goes up a level for this turn.
+                self.iris_elevated = True
             await self.post(UserInput(text))
             self.window.scroll_end(animate=False)
             self._loading = await self.post(Loading("Please wait..."), loading=True)
@@ -832,6 +861,14 @@ class Conversation(containers.Vertical):
         if self.agent is not None:
             stop_reason: str | None = None
             self.busy_count += 1
+            if (
+                self.iris_project is not None
+                and not self._iris_project_told
+                and not prompt.startswith("/")
+            ):
+                # Slash commands must stay first in the prompt, so the context waits.
+                self._iris_project_told = True
+                prompt = f"{self.iris_project.context_prompt()}\n\n{prompt}"
             try:
                 self.turn = "agent"
                 stop_reason = await self.agent.send_prompt(prompt)
@@ -878,6 +915,7 @@ class Conversation(containers.Vertical):
             await self._loading.remove()
         self._agent_response = None
         self._agent_thought = None
+        self.iris_elevated = False
 
         if self._directory_changed or not self.is_watching_directory:
             self._directory_changed = False
@@ -1045,10 +1083,13 @@ class Conversation(containers.Vertical):
         from toad.widgets.tool_call import ToolCall
 
         tool_call = message.tool_call
-        if isinstance(message, acp_messages.ToolCall) and (
-            voice := self._iris_voice()
-        ) is not None:
-            voice.announce_tool(dict(tool_call))
+        if isinstance(message, acp_messages.ToolCall):
+            from toad.widgets.iris_orb import is_elevated_tool
+
+            if is_elevated_tool(tool_call):
+                self.iris_elevated = True
+            if (voice := self._iris_voice()) is not None:
+                voice.announce_tool(dict(tool_call))
 
         if tool_call.get("status", None) in (None, "completed"):
             self._agent_thought = None
@@ -1210,6 +1251,203 @@ class Conversation(containers.Vertical):
     async def on_acp_set_modes(self, message: acp_messages.SetModes):
         self.modes = message.modes
         self.current_mode = self.modes[message.current_mode]
+        self.update_slash_commands()
+
+    async def iris_mode_command(self, text: str) -> None:
+        """`/modo`: change the agent mode from the argument, or pick from a list."""
+        from toad.iris_config import ConfigChoice, ConfigOption, find_choice
+        from toad.widgets.question import Ask
+
+        if not self.modes:
+            self.notify("Este agente não tem modos.", title="/modo", severity="warning")
+            return
+        option = ConfigOption(
+            "mode",
+            "Modo",
+            "mode",
+            self.current_mode.id if self.current_mode else "",
+            tuple(
+                ConfigChoice(mode.id, mode.name, mode.description or "")
+                for mode in self.modes.values()
+            ),
+        )
+        if text.strip():
+            if (choice := find_choice(option, text)) is None:
+                self.notify(
+                    f"Não reconheci {text.strip()!r}.", title="/modo", severity="error"
+                )
+            else:
+                await self.set_mode(choice.value)
+            return
+        answers = [
+            Answer(
+                ("● " if choice.value == option.current else "  ")
+                + choice.name
+                + (f" — {choice.description}" if choice.description else ""),
+                choice.value,
+            )
+            for choice in option.choices
+        ]
+        answers.append(Answer("Cancelar", ""))
+
+        def chosen(answer: Answer) -> None:
+            if answer.id:
+                self.run_worker(self.set_mode(answer.id))
+
+        self.prompt.ask(
+            Ask(f"Modo (atual: {option.current_name})", answers, None, chosen)
+        )
+
+    @on(acp_messages.SetConfigOptions)
+    def on_acp_set_config_options(self, message: acp_messages.SetConfigOptions):
+        self.config_options = {option.id: option for option in message.options}
+        # Claude also reports its permission mode here; keep the mode picker in step.
+        for option in message.options:
+            if option.category == "mode" and (mode := self.modes.get(option.current)):
+                if self.current_mode is None or self.current_mode.id != mode.id:
+                    self.current_mode = mode
+        self.update_slash_commands()
+
+    async def set_config_option(self, option: ConfigOption, choice: ConfigChoice) -> None:
+        """Ask the agent to change a session option (model, effort...)."""
+        if (agent := self.agent) is None:
+            return
+        if (error := await agent.set_config_option(option, choice.value)) is not None:
+            self.notify(error, title=option.name, severity="error")
+            return
+        if (current := self.config_options.get(option.id)) is not None:
+            self.config_options = {
+                **self.config_options,
+                option.id: current.with_current(choice.value),
+            }
+        self.flash(
+            Content.from_markup("$name: [b]$choice", name=option.name, choice=choice.name),
+            style="success",
+        )
+
+    async def iris_option_command(self, command: str, category: str, text: str) -> None:
+        """`/model`, `/esforco`: change the option from the argument, or pick from a list."""
+        from toad.iris_config import by_category, find_choice
+
+        option = by_category(list(self.config_options.values()), category)
+        agent = self.agent_title or "Este agente"
+        if option is None:
+            self.notify(
+                f"{agent} não permite trocar isso pela Íris.",
+                title=f"/{command}",
+                severity="warning",
+            )
+            return
+        if text.strip():
+            if (choice := find_choice(option, text)) is None:
+                names = ", ".join(choice.value for choice in option.choices)
+                self.notify(
+                    f"Não reconheci {text.strip()!r}. Opções: {names}",
+                    title=f"/{command}",
+                    severity="error",
+                )
+            else:
+                await self.set_config_option(option, choice)
+            return
+
+        from toad.widgets.question import Ask
+
+        choices = {choice.value: choice for choice in option.choices}
+        answers = [
+            Answer(
+                ("● " if choice.value == option.current else "  ")
+                + choice.name
+                + (f" — {choice.description}" if choice.description else ""),
+                choice.value,
+            )
+            for choice in option.choices
+        ]
+        answers.append(Answer("Cancelar", ""))
+
+        def chosen(answer: Answer) -> None:
+            if (choice := choices.get(answer.id)) is not None:
+                self.run_worker(self.set_config_option(option, choice))
+
+        self.prompt.ask(
+            Ask(f"{option.name} (atual: {option.current_name})", answers, None, chosen)
+        )
+
+    async def iris_project_command(self, text: str) -> None:
+        """`/projeto`: show, open, create or extend Íris projects."""
+        from toad import iris_projects
+        from toad.widgets.markdown_note import MarkdownNote
+
+        action, _, rest = text.strip().partition(" ")
+        action, rest = action.lower(), rest.strip()
+        projects = iris_projects.load_projects()
+        try:
+            if not action:
+                if self.iris_project is not None:
+                    await self.post(MarkdownNote(self.iris_project.summary_markdown()))
+                names = ", ".join(f"`{project.nome}`" for project in projects)
+                await self.post(
+                    MarkdownNote(
+                        (f"**Projetos:** {names}\n\n" if names else "Nenhum projeto ainda.\n\n")
+                        + "`/projeto NOME` abre uma sessão no projeto · "
+                        "`/projeto novo NOME descrição` cria com esta pasta · "
+                        "`/projeto adicionar CAMINHO` liga uma pasta ou arquivo · "
+                        "`/projeto remover CAMINHO` desliga · "
+                        "`/projeto descricao TEXTO` troca a descrição"
+                    )
+                )
+                return
+            if action == "novo":
+                name, _, description = rest.partition(" ")
+                project = iris_projects.new_project(
+                    projects, name, description, [self.project_path]
+                )
+                iris_projects.save_projects(projects)
+                self.iris_project = project
+                self.update_title()
+                self.flash(f"Projeto [b]{project.nome}[/] criado", style="success")
+                return
+            if action in ("adicionar", "remover", "descricao", "descrição"):
+                current = self.iris_project and iris_projects.find_project(
+                    projects, self.iris_project.nome
+                )
+                if current is None:
+                    raise iris_projects.ProjectError(
+                        "Esta sessão não está em um projeto. Crie com /projeto novo NOME."
+                    )
+                if action == "adicionar":
+                    path = Path(self.working_directory) / Path(rest).expanduser()
+                    kind = current.add_path(path)
+                    message = f"{kind.capitalize()} ligada ao projeto"
+                elif action == "remover":
+                    path = Path(self.working_directory) / Path(rest).expanduser()
+                    if not current.remove_path(path):
+                        raise iris_projects.ProjectError(f"{rest} não faz parte do projeto.")
+                    message = "Removido do projeto"
+                else:
+                    current.descricao = rest
+                    message = "Descrição atualizada"
+                iris_projects.save_projects(projects)
+                self.iris_project = current
+                self.flash(message, style="success")
+                self.notify(
+                    "O agente fica sabendo na próxima sessão do projeto.",
+                    title="/projeto",
+                )
+                return
+            project = iris_projects.find_project(projects, text)
+            if project is None:
+                raise iris_projects.ProjectError(f'Não encontrei o projeto "{text.strip()}".')
+            if (folder := project.main_folder) is None:
+                raise iris_projects.ProjectError(
+                    f'O projeto "{project.nome}" não tem nenhuma pasta que exista.'
+                )
+            if self._agent_data is not None:
+                self.app.iris_project_preferred = project.nome
+                self.post_message(
+                    messages.SessionNew(str(folder), self._agent_data["identity"], "")
+                )
+        except iris_projects.ProjectError as error:
+            self.notify(str(error), title="/projeto", severity="error")
 
     @on(messages.HistoryMove)
     async def on_history_move(self, message: messages.HistoryMove) -> None:
@@ -1409,6 +1647,7 @@ class Conversation(containers.Vertical):
         ]
 
         slash_commands.extend(self.agent_slash_commands)
+        slash_commands.extend(self._iris_slash_commands())
         deduplicated_slash_commands = {
             slash_command.command: slash_command for slash_command in slash_commands
         }
@@ -1416,6 +1655,36 @@ class Conversation(containers.Vertical):
             deduplicated_slash_commands.values(), key=attrgetter("command")
         )
         return slash_commands
+
+    def _iris_slash_commands(self) -> list[SlashCommand]:
+        """Íris' own commands; `/model` & co. only when the agent offers the option."""
+        from toad.iris_config import EFFORT, MODEL, by_category
+
+        commands = [
+            SlashCommand(
+                "/projeto",
+                "Projetos da Íris: pastas, arquivos, descrição e MCP",
+                "<nome | novo NOME descrição | adicionar CAMINHO | remover CAMINHO>",
+            )
+        ]
+        options = list(self.config_options.values())
+        for names, category, description in (
+            (("/model", "/modelo"), MODEL, "Trocar o modelo"),
+            (("/esforco",), EFFORT, "Trocar o nível de esforço (raciocínio)"),
+        ):
+            if (option := by_category(options, category)) is None:
+                continue
+            hint = " | ".join(choice.value for choice in option.choices)
+            for name in names:
+                commands.append(
+                    SlashCommand(
+                        name, f"{description} (atual: {option.current_name})", f"<{hint}>"
+                    )
+                )
+        if self.modes:
+            hint = " | ".join(mode.id for mode in self.modes.values())
+            commands.append(SlashCommand("/modo", "Trocar o modo do agente", f"<{hint}>"))
+        return commands
 
     def update_slash_commands(self) -> None:
         """Update slash commands, which may have changed since mounting."""
@@ -1432,6 +1701,13 @@ class Conversation(containers.Vertical):
             self.app.settings.get("shell.allow_commands", expect_type=str).split()
         )
         self.shell
+        from toad.iris_projects import load_projects, project_for_path
+
+        self.iris_project = project_for_path(
+            load_projects(),
+            self.project_path,
+            preferred=getattr(self.app, "iris_project_preferred", None),
+        )
         if self._agent_data is not None:
 
             async def start_agent() -> None:
@@ -1444,6 +1720,11 @@ class Conversation(containers.Vertical):
                     self._agent_data,
                     self._agent_session_id,
                     self._session_pk,
+                    mcp_servers=(
+                        self.iris_project.mcp_servers()
+                        if self.iris_project is not None
+                        else None
+                    ),
                 )
                 await self.agent.start(self)
                 self.post_message(
@@ -1950,6 +2231,25 @@ class Conversation(containers.Vertical):
             command = "toad:session-close"
         elif command == "sair":
             await self.app.action_quit()
+            return True
+        elif command in ("model", "modelo", "esforco", "esforço"):
+            from toad.iris_config import EFFORT, MODEL
+
+            category = MODEL if command.startswith("model") else EFFORT
+            if not any(
+                option.category == category for option in self.config_options.values()
+            ) and any(
+                slash.command == f"/{command}" for slash in self.agent_slash_commands
+            ):
+                # The agent has its own command by that name: let it handle it.
+                return False
+            await self.iris_option_command(command, category, parameters)
+            return True
+        elif command == "modo":
+            await self.iris_mode_command(parameters)
+            return True
+        elif command == "projeto":
+            await self.iris_project_command(parameters)
             return True
         if command == "toad:about":
             from toad import about

@@ -124,17 +124,22 @@ class Agent(AgentBase):
         agent: AgentData,
         session_id: str | None,
         session_pk: int | None = None,
+        mcp_servers: list[dict] | None = None,
     ) -> None:
         """
 
         Args:
             project_root: Project root path.
             command: Command to launch agent.
+            mcp_servers: MCP servers (ACP format) to give the session, e.g. from an Íris project.
         """
         super().__init__(project_root)
 
         self._agent_data = agent
         self.session_id = session_id
+        self.mcp_servers: list[dict] = list(mcp_servers or [])
+        self._stopping = False
+        """Set when Íris itself ends the agent, so an exit isn't reported as a disconnect."""
 
         self.server = jsonrpc.Server()
         self.server.expose_instance(self)
@@ -343,6 +348,13 @@ class Agent(AgentBase):
 
             case {"sessionUpdate": "current_mode_update", "currentModeId": mode_id}:
                 self.post_message(messages.ModeUpdate(mode_id))
+
+            case {"sessionUpdate": "config_option_update", "configOptions": options}:
+                from toad.iris_config import parse_config_options
+
+                self.post_message(
+                    messages.SetConfigOptions(parse_config_options(options))
+                )
 
             case {"sessionUpdate": "usage_update", "used": used, "size": size}:
                 match update.get("cost"):
@@ -641,6 +653,9 @@ class Agent(AgentBase):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+        if process.returncode is None:
+            with suppress(asyncio.TimeoutError, ProcessLookupError):
+                await asyncio.wait_for(process.wait(), 2)
         if process.returncode:
             assert process.stderr is not None
             fail_details = (await process.stderr.read()).decode("utf-8", "replace")
@@ -650,11 +665,28 @@ class Agent(AgentBase):
                     details=fail_details,
                 )
             )
+        elif not self._stopping:
+            # The agent closed the connection by itself (e.g. Codex blocked by a
+            # corporate account): say so, instead of a session that silently stops.
+            fail_details = ""
+            if process.stderr is not None:
+                with suppress(Exception):
+                    fail_details = (await process.stderr.read()).decode(
+                        "utf-8", "replace"
+                    )
+            self.post_message(
+                AgentFail(
+                    f"{self._agent_data['name']} encerrou a conexão",
+                    details=fail_details.strip()[-2000:].replace("[", "\\["),
+                    help="disconnected",
+                )
+            )
 
         self._process = None
 
     async def stop(self) -> None:
         """Gracefully stop the process."""
+        self._stopping = True
         if self.session_pk is not None:
             db = DB()
             await db.session_update_last_used(self.session_pk)
@@ -753,7 +785,7 @@ class Agent(AgentBase):
         with self.request():
             session_new_response = api.session_new(
                 str(self.project_root_path),
-                [],
+                self._supported_mcp_servers(),
             )
         response = await session_new_response.wait()
         assert response is not None
@@ -784,6 +816,49 @@ class Agent(AgentBase):
                 for mode in available_modes
             }
             self.post_message(messages.SetModes(current_mode, modes_update))
+        self._post_session_options(response)
+
+    def _supported_mcp_servers(self) -> list[dict]:
+        """The project's MCP servers, minus transports the agent can't use."""
+        mcp_capabilities = self.agent_capabilities.get("mcpCapabilities") or {}
+        servers: list[dict] = []
+        for server in self.mcp_servers:
+            transport = server.get("type", "stdio")
+            if transport != "stdio" and not mcp_capabilities.get(transport, False):
+                self.log(
+                    f"[error] MCP server {server.get('name')!r} skipped: "
+                    f"agent doesn't support {transport!r}"
+                )
+                continue
+            servers.append(server)
+        return servers
+
+    def _post_session_options(self, response: Any) -> None:
+        from toad.iris_config import parse_session_options
+
+        if (options := parse_session_options(response)) is not None:
+            self.post_message(messages.SetConfigOptions(options))
+
+    async def set_config_option(self, option, value: str) -> str | None:
+        with self.request():
+            if option.via_models:
+                response = api.session_set_model(self.session_id, value)
+            else:
+                response = api.session_set_config_option(
+                    self.session_id, option.id, value
+                )
+        try:
+            result = await response.wait()
+        except jsonrpc.APIError as error:
+            match error.data:
+                case {"details": str(details)}:
+                    return details
+            return error.message or "Não foi possível trocar a opção"
+        except jsonrpc.JSONRPCError as error:
+            return error.message or "Não foi possível trocar a opção"
+        if isinstance(result, dict) and "configOptions" in result:
+            self._post_session_options(result)
+        return None
 
     async def acp_load_session(self) -> None:
         assert self.session_id is not None, "Session id must be set"
@@ -799,8 +874,11 @@ class Agent(AgentBase):
                         self._agent_data = agent_data
 
         with self.request():
-            session_load_response = api.session_load(cwd, [], self.session_id)
+            session_load_response = api.session_load(
+                cwd, self._supported_mcp_servers(), self.session_id
+            )
         response = await session_load_response.wait()
+        self._post_session_options(response)
 
         if (modes := response.get("modes", None)) is not None:
             current_mode = modes["currentModeId"]

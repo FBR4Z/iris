@@ -53,3 +53,15 @@ def session_prompt(
 def session_set_mode(sessionId: str, modeId: str) -> protocol.SetSessionModeResponse:
     """https://agentclientprotocol.com/protocol/session-modes#from-the-client"""
     ...
+
+
+@API.method(name="session/set_config_option")
+def session_set_config_option(sessionId: str, configId: str, value: str) -> dict:
+    """https://agentclientprotocol.com/protocol/session-config-options"""
+    ...
+
+
+@API.method(name="session/set_model")
+def session_set_model(sessionId: str, modelId: str) -> dict:
+    """Unstable ACP method, used by agents that report `models` (e.g. Gemini CLI)."""
+    ...

@@ -125,6 +125,12 @@ def main(ctx, version):
     help="Public URL to use in conjunction with --serve",
 )
 @click.option("-s", "--serve", is_flag=True, help="Serve Toad as a web application")
+@click.option(
+    "--projeto",
+    metavar="NOME",
+    default="",
+    help="Abre na pasta principal de um projeto da Íris (veja `iris projeto`).",
+)
 def run(
     port: int,
     host: str,
@@ -132,9 +138,18 @@ def run(
     project_dir: str = ".",
     agent: str = "1",
     public_url: str | None = None,
+    projeto: str = "",
 ):
     """Run an installed agent (same as `toad PATH`)."""
 
+    if projeto:
+        project = _get_project(projeto)
+        if (folder := project.main_folder) is None:
+            raise click.ClickException(
+                f'O projeto "{project.nome}" não tem nenhuma pasta que exista.'
+            )
+        project_dir = str(folder)
+        agent = agent or project.agente
     check_directory(project_dir)
 
     if agent:
@@ -149,6 +164,8 @@ def run(
         agent_data=agent_data,
         project_dir=project_dir,
     )
+    if projeto:
+        app.iris_project_preferred = project.nome
     if serve:
         import shlex
         from textual_serve.server import Server
@@ -264,6 +281,164 @@ def acp(
     print("[bold magenta]Thanks for trying out Toad!")
     print("Please head to Discussions to share your experiences (good or bad).")
     print("https://github.com/batrachianai/toad/discussions")
+
+
+def _get_project(name: str):
+    from toad.iris_projects import find_project, load_projects
+
+    if (project := find_project(load_projects(), name)) is None:
+        raise click.ClickException(f'Projeto "{name}" não encontrado (veja `iris projeto listar`).')
+    return project
+
+
+def _edit_project(name: str):
+    """Load all projects and the named one, for a change followed by `save_projects`."""
+    from toad.iris_projects import find_project, load_projects
+
+    projects = load_projects()
+    if (project := find_project(projects, name)) is None:
+        raise click.ClickException(f'Projeto "{name}" não encontrado (veja `iris projeto listar`).')
+    return projects, project
+
+
+@main.group("projeto")
+def projeto() -> None:
+    """Projetos: pastas e arquivos ligados, com descrição e servidores MCP.
+
+    Uma sessão aberta numa pasta de projeto recebe a descrição e a lista de pastas e
+    arquivos no primeiro pedido, e os servidores MCP do projeto.
+    """
+
+
+@projeto.command("novo")
+@click.argument("nome")
+@click.argument("caminhos", nargs=-1, type=click.Path(exists=True))
+@click.option("-d", "--descricao", default="", help="Descrição do projeto.")
+@click.option("-a", "--agente", default="", help="Agente padrão (claude, codex, gemini).")
+def projeto_novo(nome: str, caminhos: tuple[str, ...], descricao: str, agente: str) -> None:
+    """Cria um projeto com pastas e arquivos (sem caminhos: a pasta atual)."""
+    from pathlib import Path
+
+    from toad.iris_projects import ProjectError, load_projects, new_project, save_projects
+
+    projects = load_projects()
+    try:
+        project = new_project(
+            projects, nome, descricao, [Path(path) for path in caminhos or (".",)]
+        )
+    except ProjectError as error:
+        raise click.ClickException(str(error))
+    project.agente = agente
+    save_projects(projects)
+    click.echo(f'Projeto "{project.nome}" criado.')
+
+
+@projeto.command("listar")
+def projeto_listar() -> None:
+    """Lista os projetos."""
+    from toad.iris_projects import load_projects, projects_path
+
+    projects = load_projects()
+    if not projects:
+        click.echo(f"Nenhum projeto ainda ({projects_path()}).")
+    for project in projects:
+        click.echo(
+            f"{project.nome}: {project.descricao or '(sem descrição)'} "
+            f"[{len(project.pastas)} pasta(s), {len(project.arquivos)} arquivo(s), "
+            f"{len(project.mcp)} MCP]"
+        )
+
+
+@projeto.command("mostrar")
+@click.argument("nome")
+def projeto_mostrar(nome: str) -> None:
+    """Mostra um projeto."""
+    click.echo(_get_project(nome).summary_markdown())
+
+
+@projeto.command("adicionar")
+@click.argument("nome")
+@click.argument("caminhos", nargs=-1, required=True, type=click.Path(exists=True))
+def projeto_adicionar(nome: str, caminhos: tuple[str, ...]) -> None:
+    """Liga pastas ou arquivos a um projeto."""
+    from pathlib import Path
+
+    from toad.iris_projects import save_projects
+
+    projects, project = _edit_project(nome)
+    for path in caminhos:
+        kind = project.add_path(Path(path))
+        click.echo(f"{kind}: {Path(path).resolve()}")
+    save_projects(projects)
+
+
+@projeto.command("remover")
+@click.argument("nome")
+@click.argument("caminhos", nargs=-1)
+def projeto_remover(nome: str, caminhos: tuple[str, ...]) -> None:
+    """Desliga pastas ou arquivos (sem caminhos: apaga o projeto)."""
+    from pathlib import Path
+
+    from toad.iris_projects import save_projects
+
+    projects, project = _edit_project(nome)
+    if not caminhos:
+        click.confirm(f'Apagar o projeto "{project.nome}"?', abort=True)
+        projects.remove(project)
+    for path in caminhos:
+        if not project.remove_path(Path(path)):
+            click.echo(f"Não faz parte do projeto: {path}")
+    save_projects(projects)
+
+
+@projeto.command("descricao")
+@click.argument("nome")
+@click.argument("texto", nargs=-1, required=True)
+def projeto_descricao(nome: str, texto: tuple[str, ...]) -> None:
+    """Troca a descrição de um projeto."""
+    from toad.iris_projects import save_projects
+
+    projects, project = _edit_project(nome)
+    project.descricao = " ".join(texto)
+    save_projects(projects)
+
+
+@projeto.command("mcp", context_settings={"ignore_unknown_options": True})
+@click.argument("nome")
+@click.argument("servidor")
+@click.argument("comando", nargs=-1, type=click.UNPROCESSED)
+@click.option("-e", "--env", multiple=True, metavar="NOME=valor", help="Variável de ambiente.")
+@click.option("--remover", is_flag=True, help="Remove o servidor do projeto.")
+def projeto_mcp(
+    nome: str, servidor: str, comando: tuple[str, ...], env: tuple[str, ...], remover: bool
+) -> None:
+    """Liga um servidor MCP ao projeto: um comando (stdio) ou uma URL (http).
+
+    \b
+    iris projeto mcp Estufa esp-idf -- eim run "idf.py mcp-server"
+    iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
+    """
+    from toad.iris_projects import ProjectError, parse_mcp_command, save_projects
+
+    projects, project = _edit_project(nome)
+    project.mcp = [server for server in project.mcp if server.get("name") != servidor]
+    if not remover:
+        try:
+            project.mcp.append(parse_mcp_command(servidor, list(comando), env))
+        except ProjectError as error:
+            raise click.ClickException(str(error))
+    save_projects(projects)
+    click.echo(f'Servidor "{servidor}" {"removido" if remover else "ligado"}.')
+
+
+@projeto.command("abrir")
+@click.argument("nome")
+@click.option("-a", "--agente", default="", help="Agente (padrão: o do projeto).")
+@click.pass_context
+def projeto_abrir(ctx, nome: str, agente: str) -> None:
+    """Abre a Íris na pasta principal do projeto."""
+    project = _get_project(nome)
+    ctx.invoke(run, projeto=project.nome, agent=agente or project.agente)
 
 
 @main.command("settings")

@@ -318,6 +318,8 @@ class ToadApp(App, inherit_bindings=False):
         """
         self.iris_usage_announced: set[tuple[str, float, float | None]] = set()
         """Usage levels Íris has already spoken, so each one is said once per reset."""
+        self.iris_project_preferred: str | None = None
+        """Project chosen by name (`--projeto`, `/projeto NOME`), for folders in several."""
 
         super().__init__()
         self.project_dir = Path(project_dir or "./").expanduser().resolve()

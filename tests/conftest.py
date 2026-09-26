@@ -22,8 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FAKE_AGENT = ROOT / "tools" / "fake_agent.py"
 
 
-def agent_data(name: str = "Claude Code", identity: str = "claude.com") -> dict:
-    """Agent definition that launches the fake ACP agent."""
+def agent_data(
+    name: str = "Claude Code", identity: str = "claude.com", args: str = ""
+) -> dict:
+    """Agent definition that launches the fake ACP agent (`args` e.g. "--models")."""
     return {
         "identity": identity,
         "name": name,
@@ -38,7 +40,7 @@ def agent_data(name: str = "Claude Code", identity: str = "claude.com") -> dict:
         "description": "",
         "tags": [],
         "help": "",
-        "run_command": {"*": f'"{sys.executable}" "{FAKE_AGENT}"'},
+        "run_command": {"*": f'"{sys.executable}" "{FAKE_AGENT}" {args}'.strip()},
         "actions": {},
     }
 
@@ -86,13 +88,16 @@ def fresh_settings():
     """Each test starts from default settings."""
     from toad import paths
 
-    settings_file = paths.get_config() / "toad.json"
-    usage_file = paths.get_state() / "iris-usage.json"
-    settings_file.unlink(missing_ok=True)
-    usage_file.unlink(missing_ok=True)
+    files = [
+        paths.get_config() / "toad.json",
+        paths.get_config() / "iris-projetos.json",
+        paths.get_state() / "iris-usage.json",
+    ]
+    for file in files:
+        file.unlink(missing_ok=True)
     yield
-    settings_file.unlink(missing_ok=True)
-    usage_file.unlink(missing_ok=True)
+    for file in files:
+        file.unlink(missing_ok=True)
 
 
 async def wait_until(pilot, predicate, timeout: float = 20.0) -> bool:

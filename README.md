@@ -28,7 +28,10 @@ A Íris é um fork do [Toad](https://github.com/batrachianai/toad), de Will McGu
   - anel externo **azul** no planejamento e **laranja** na execução (a borda do prompt e da barra lateral acompanham);
   - anel interno na **cor do agente** (Claude terracota, Codex verde, Gemini azul-violeta);
   - respira parado, gira rápido trabalhando, pulsa **amarelo** pedindo permissão e **vermelho** em erro;
-  - solta uma **onda** ao concluir um turno e "liga" com animação ao abrir.
+  - solta uma **onda** ao concluir um turno e "liga" com animação ao abrir;
+  - tema **Sharingan** opcional: 1 tomoe no planejamento, 3 na execução e **Mangekyō** quando uma skill ou subagente roda.
+- **Projetos** — pastas e arquivos de qualquer lugar ligados a um projeto, com descrição e servidores MCP (ex.: ESP-IDF).
+- **`/model`, `/esforco`, `/modo`** — troca modelo, nível de esforço e modo do Claude e do Gemini sem sair da conversa.
 - **Voz local e independente do modelo** (opcional) — avisos falados, ditado com F9 e leitura de respostas. Nada sai da sua máquina.
 - **Árvore de arquivos** da pasta atual, **plano** do agente e **histórico de sessões**.
 - **Tema Íris** (azul-marinho, ciano e laranja), interface em **português** e coleta de dados **desligada**.
@@ -111,10 +114,35 @@ A pasta onde você abre a Íris é o projeto que o agente enxerga.
 
 | Comando | Ação |
 |---|---|
+| `/model [nome]` (ou `/modelo`) | Troca o modelo; sem nome, mostra a lista (Claude e Gemini) |
+| `/esforco [nível]` | Troca o nível de esforço/raciocínio (Claude) |
+| `/modo [nome]` | Troca o modo (planejamento, aceitar edições...) |
+| `/projeto` | Mostra o projeto; `/projeto NOME` abre uma sessão nele (veja [Projetos](#projetos)) |
 | `/fechar` | Fecha a sessão atual |
 | `/sair` | Sai da Íris |
 | `/toad:rename <nome>` | Renomeia a sessão |
 | `/toad:session-new` | Nova sessão na mesma pasta |
+
+Os comandos `/` que aparecem são os que o agente publica pelo ACP mais os da Íris. Comandos internos das CLIs originais (`/model`, `/config`, `/login`...) não passam pelo ACP; por isso a Íris tem os próprios `/model`, `/esforco` e `/modo`, que usam as opções que o agente informa. O modelo atual aparece embaixo do círculo, ao lado do modo.
+
+### Projetos
+
+Um projeto junta pastas e arquivos (podem estar em lugares diferentes), uma descrição e servidores MCP. Quando uma sessão abre numa pasta do projeto, a Íris:
+
+- manda ao agente, junto do primeiro pedido, a descrição e a lista de pastas e arquivos;
+- liga os servidores MCP do projeto à sessão (vale para Claude, Codex e Gemini);
+- mostra `[Projeto]` no título.
+
+```powershell
+iris projeto novo Estufa C:\esp\estufa -d "Controle da estufa com ESP32-S3" -a claude
+iris projeto adicionar Estufa C:\docs\pinagem.md D:\datasheets\sensor
+iris projeto mcp Estufa esp-idf -- eim run "idf.py mcp-server"
+iris projeto mcp Estufa espressif-docs https://mcp.espressif.com/docs
+iris projeto listar                # também: mostrar, descricao, remover
+iris projeto abrir Estufa          # ou: iris --projeto Estufa
+```
+
+Dentro da Íris: `/projeto novo NOME descrição` (usa a pasta atual), `/projeto adicionar CAMINHO`, `/projeto remover CAMINHO`, `/projeto descricao TEXTO`, `/projeto NOME`. Os projetos ficam em `%USERPROFILE%\.config\toad\iris-projetos.json`. Para ESP32 (Thonny e ESP-IDF), veja [docs/esp32-mcp.md](docs/esp32-mcp.md).
 
 ### Shell embutido
 
@@ -188,7 +216,7 @@ Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; g
 
 Além das do Toad, em **Configurações**:
 
-- **Íris** — cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
+- **Íris** — tema do olho (Arco ou Sharingan); modos tratados como nível máximo (padrão: bypass, yolo); cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
 - **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, só CPU, envio automático do ditado.
 
 O arquivo fica em `%USERPROFILE%\.config\toad\toad.json`.
@@ -214,6 +242,8 @@ Arquivos principais do fork:
 | `src/toad/widgets/iris_orb.py` | o círculo |
 | `src/toad/iris_voice.py` | cliente da voz, mapa de eventos, resumo falado |
 | `src/toad/iris_usage.py` | limites da assinatura (5 h / semana) embaixo do círculo |
+| `src/toad/iris_config.py` | opções de sessão (modelo, esforço) para `/model` e `/esforco` |
+| `src/toad/iris_projects.py` | projetos: pastas, arquivos, descrição e MCP |
 | `src/toad/shell.py` | shell embutido (pty no Linux/macOS, ConPTY no Windows) |
 | `src/toad/iris_theme.py` | tema |
 | `src/toad/iris_i18n.py` | tradução do rodapé |
@@ -227,13 +257,14 @@ Arquivos principais do fork:
 uv run pytest
 ```
 
-São ~90 testes (funções da voz, círculo, bordas, tela inicial, tradução, sessões, avisos falados, uso da assinatura, shell embutido) que rodam a Íris sem tela, com o agente falso — não gastam cota nem tocam nas suas configurações. Rodam também no GitHub Actions (Windows e Linux) a cada envio. Vale rodar depois de puxar atualizações do Toad.
+São ~105 testes (funções da voz, círculo e tema Sharingan, `/model`, projetos e MCP, bordas, tela inicial, tradução, sessões, avisos falados, uso da assinatura, shell embutido) que rodam a Íris sem tela, com o agente falso — não gastam cota nem tocam nas suas configurações. Rodam também no GitHub Actions (Windows e Linux) a cada envio. Vale rodar depois de puxar atualizações do Toad.
 
 ## Solução de problemas
 
 - **A Íris fechou sozinha** — veja `%USERPROFILE%\.local\state\toad\crash.log`.
 - **A voz não inicia** — veja `%USERPROFILE%\.local\state\toad\iris-voz.log`; teste com `iris-voz check`.
 - **Logs dos agentes** — `%USERPROFILE%\.local\state\toad\logs\`.
+- **O agente conectou e depois desconectou** — a Íris avisa ("encerrou a conexão") e mostra a saída de erro do agente. Com o Codex em conta corporativa (ChatGPT Business/Enterprise), o administrador precisa liberar o Codex CLI no workspace; confira também o login rodando `codex` fora da Íris e o log `Codex_CLI_*.txt` na pasta de logs.
 - **Testar sem gastar cota** — `iris acp "python tools/fake_agent.py"`.
 
 ### Limitações conhecidas no Windows

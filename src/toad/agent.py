@@ -47,6 +47,18 @@ class AgentBase(ABC):
             str: The stop reason.
         """
 
+    async def set_config_option(self, option, value: str) -> str | None:
+        """Change a session option (model, effort...).
+
+        Args:
+            option: A `toad.iris_config.ConfigOption`.
+            value: The value of the chosen choice.
+
+        Returns:
+            An error message, or `None` on success.
+        """
+        return "Este agente não permite trocar essa opção."
+
     async def cancel(self) -> bool:
         """Cancel prompt.
 

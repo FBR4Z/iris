@@ -15,6 +15,7 @@ from toad.acp.encode_tool_call_id import encode_tool_call_id
 if TYPE_CHECKING:
     from textual.content import Content
     from toad.acp.agent import Mode
+    from toad.iris_config import ConfigOption
     from toad.iris_usage import RateLimits
     from toad.widgets.terminal_tool import ToolState
 
@@ -144,6 +145,13 @@ class SetModes(AgentMessage):
 
     current_mode: str
     modes: dict[str, Mode]
+
+
+@dataclass
+class SetConfigOptions(AgentMessage):
+    """The agent reported its session options (model, effort...)."""
+
+    options: list[ConfigOption]
 
 
 @dataclass

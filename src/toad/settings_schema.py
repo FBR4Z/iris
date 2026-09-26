@@ -384,6 +384,21 @@ SCHEMA: list[SchemaDict] = [
         "type": "object",
         "fields": [
             {
+                "key": "orb_theme",
+                "title": "Tema do olho",
+                "help": "Arco: anel estilo reator (cores de planejamento e execução abaixo). Sharingan: olho vermelho com 1 tomoe no planejamento, 3 na execução e Mangekyō quando uma skill ou subagente está rodando (ou num modo sem permissões).",
+                "type": "choices",
+                "default": "arco",
+                "choices": [("Arco (reator)", "arco"), ("Sharingan", "sharingan")],
+            },
+            {
+                "key": "elevated_modes",
+                "title": "Modos de nível máximo",
+                "help": "Palavras, separadas por vírgula, que identificam modos tratados como nível máximo (Mangekyō no tema Sharingan, três cometas no Arco), além das skills e subagentes.",
+                "type": "string",
+                "default": "bypass, yolo",
+            },
+            {
                 "key": "plan_color",
                 "title": "Cor do planejamento",
                 "help": "Cor do círculo em modos de planejamento (ex.: #29c7ff, cyan, rgb(41,199,255)).",
