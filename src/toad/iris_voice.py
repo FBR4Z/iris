@@ -526,10 +526,19 @@ class IrisVoice:
         from toad.iris_commands import parse_command, strip_wake_word
 
         if wake:
-            rest = strip_wake_word(text)
+            rest = strip_wake_word(text, loose=True)
             if rest is None:
                 log(f"iris-voz: alarme falso da palavra de ativação: {text!r}")
+                # Say what was heard: a silent drop looks like dictation is broken.
+                self.app.notify(
+                    f"Ouvi “{text}”, mas não parecia um pedido para a Íris. "
+                    "Comece com “Íris, …” ou use o F9.",
+                    title="Voz",
+                    timeout=5,
+                )
                 return
+            # Written the way the command parser expects ("É, Ísis, …" -> "Íris, …").
+            text = f"Íris, {rest}" if rest else "Íris"
             if not self._get("comandos", True):
                 text = rest
                 if not text:

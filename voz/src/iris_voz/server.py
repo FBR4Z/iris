@@ -423,6 +423,11 @@ class Listener:
             initial_prompt=self.hint or None,
         )
         text = " ".join(segment.text.strip() for segment in segments)
+        # In iris-voz.log, to see what Whisper made of it when dictation misbehaves.
+        try:
+            print(f"[transcrição{' após ativação' if wake else ''}] {text!r}", file=sys.stderr, flush=True)
+        except (UnicodeError, OSError):
+            pass  # never lose the transcript over a log line
         emit("transcript", text=text, wake=wake)
 
 

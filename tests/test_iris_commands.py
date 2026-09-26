@@ -3,7 +3,7 @@
 import pytest
 
 from toad.app import ToadApp
-from toad.iris_commands import Command, normalize, parse_command
+from toad.iris_commands import Command, normalize, parse_command, strip_wake_word
 from toad.widgets.conversation import Conversation
 
 from conftest import agent_data, wait_until, write_settings
@@ -71,6 +71,22 @@ def test_unrecognized_command_keeps_text():
 )
 def test_plain_dictation_is_not_a_command(spoken):
     assert parse_command(spoken) is None
+
+
+@pytest.mark.parametrize(
+    "spoken, loose, strict",
+    [
+        ("Íris, abre o Claude", "abre o claude", "abre o claude"),
+        ("É, Íris, abre o Claude", "abre o claude", None),  # filler only after the wake word
+        ("Ó Íres, que horas são?", "que horas sao", None),
+        ("Então, Irís.", "", None),
+        ("Eu vi a íris do olho dele.", None, None),
+        ("Isso não é nada", None, None),
+    ],
+)
+def test_strip_wake_word(spoken, loose, strict):
+    assert strip_wake_word(spoken, loose=True) == loose
+    assert strip_wake_word(spoken) == strict
 
 
 # ------------------------------------------------------------------------ UI
@@ -159,6 +175,15 @@ async def test_wake_word_transcripts(spoken):
         )
         await pilot.pause(0.2)
         assert text_area.text == ""
+        # ...but it says what it heard instead of dropping it silently.
+        assert any("Ouvi “Eu vi a íris" in str(n.message) for n in app._notifications)
+
+        # Filler words first and a misspelled name still count after the wake word.
+        voice._handle_event({"event": "wake"})
+        voice._handle_event(
+            {"event": "transcript", "text": "É, Ísis, modo de execução.", "wake": True}
+        )
+        assert await wait_until(pilot, lambda: conversation.current_mode.id == "default")
 
         # "Íris, <free text>" is dictation, without the "unknown command" warning.
         voice._handle_event({"event": "wake"})

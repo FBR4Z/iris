@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from toad.widgets.conversation import Conversation
 
 # Whisper spells the name a few ways.
-WAKE_WORDS = ("iris", "ires", "iriz", "eris", "irish")
+WAKE_WORDS = ("iris", "ires", "iriz", "eris", "irish", "isis", "iiris")
 
 AGENTS = {
     "claude": "claude.com",
@@ -44,12 +44,32 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def strip_wake_word(text: str) -> str | None:
-    """Return what follows the wake word, or None if the text isn't addressed to Íris."""
+FILLERS = ("ok", "ei", "hey", "oi")
+# After the wake word was heard, Whisper also puts these before the name ("É, Íris…").
+WAKE_FILLERS = FILLERS + ("e", "o", "a", "ai", "ta", "entao", "bom", "olha", "fala")
+
+
+def is_wake_word(word: str, loose: bool = False) -> bool:
+    """`loose`: also near spellings ("isis", "ires"), once the wake word was heard."""
+    if word in WAKE_WORDS:
+        return True
+    from difflib import SequenceMatcher
+
+    return loose and 3 <= len(word) <= 6 and SequenceMatcher(None, word, "iris").ratio() >= 0.75
+
+
+def strip_wake_word(text: str, loose: bool = False) -> str | None:
+    """Return what follows the wake word, or None if the text isn't addressed to Íris.
+
+    `loose` is for transcripts recorded after the wake word: up to two filler words
+    may come first and the name may be misspelled.
+    """
     words = normalize(text).split(" ")
-    if words and words[0] in ("ok", "ei", "hey", "oi"):
-        words = words[1:]
-    if not words or words[0] not in WAKE_WORDS:
+    fillers = WAKE_FILLERS if loose else FILLERS
+    for _ in range(2 if loose else 1):
+        if words and words[0] in fillers:
+            words = words[1:]
+    if not words or not is_wake_word(words[0], loose):
         return None
     return " ".join(words[1:])
 
