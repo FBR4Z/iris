@@ -39,12 +39,16 @@ async def start_conversation(pilot) -> Conversation:
 async def test_launcher_branding_and_defaults():
     app = ToadApp(mode="store", agent_data=None, project_dir=".")
     async with app.run_test(size=SIZE) as pilot:
-        await pilot.pause(1)
+        from toad.screens.store import AgentItem, LauncherItem
+
+        # Agents are read in the background; the footer fills in once they have focus.
+        assert await wait_until(pilot, lambda: len(app.screen.query(AgentItem)) == 3)
+        assert await wait_until(
+            pilot, lambda: {"Detalhes", "Abrir", "Configurações", "Sessões"} <= footer_labels(app)
+        )
         assert app.theme == "iris"
         assert app.terminal_title == "Íris"
         assert app.settings.get("statistics.allow_collect", bool) is False
-
-        from toad.screens.store import AgentItem, LauncherItem
 
         names = sorted(item._agent["name"] for item in app.screen.query(AgentItem))
         assert names == ["Claude Code", "Codex CLI", "Gemini CLI"]
@@ -53,8 +57,6 @@ async def test_launcher_branding_and_defaults():
         info = app.screen.query_one("#info").render().plain
         assert "Íris" in info and "Toad" in info  # own name + credit to upstream
         assert app.screen.query_one(IrisOrb)
-
-        assert {"Detalhes", "Abrir", "Configurações", "Sessões"} <= footer_labels(app)
 
 
 # --------------------------------------------------------------- conversation
@@ -185,6 +187,9 @@ async def test_slash_fechar_closes_session():
         assert await conversation.slash_command("/fechar")
         assert await wait_until(pilot, lambda: app.session_tracker.session_count == 0)
         assert type(app.screen).__name__ == "StoreScreen"
+        from toad.screens.store import AgentItem
+
+        assert await wait_until(pilot, lambda: app.screen.query(AgentItem))
 
 
 # ----------------------------------------------------------------------- voice

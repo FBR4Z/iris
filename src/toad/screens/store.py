@@ -554,6 +554,9 @@ class StoreScreen(Screen):
                 severity="error",
             )
         else:
+            if not self.is_attached or self.query_one_optional("#container") is None:
+                # The app closed while the agents were being read.
+                return
             await self.container.mount_compose(self.compose_agents())
             with suppress(NoMatches):
                 first_grid = self.container.query(GridSelect).first()
