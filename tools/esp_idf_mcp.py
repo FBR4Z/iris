@@ -51,6 +51,8 @@ def carregar_ambiente(perfil: str) -> None:
     variaveis = json.loads(saida.stdout.decode("utf-8", errors="replace"))
     os.environ.clear()
     os.environ.update({item["n"]: item["v"] or "" for item in variaveis})
+    # Sem isso o esptool (flash) aborta num console que não é UTF-8.
+    os.environ["PYTHONUTF8"] = "1"
 
 
 def subprocessos_sem_stdin() -> None:
