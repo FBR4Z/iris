@@ -62,6 +62,8 @@ class OrbState:
     listening: bool = False
     transcribing: bool = False
     speaking: bool = False
+    watching: bool = False
+    """Waiting for the wake word."""
     level: float = 0.0
     """Microphone or speech loudness, 0..1."""
     elevated: bool = False
@@ -175,6 +177,7 @@ class IrisOrb(Widget):
                 "listening": voice.listening,
                 "transcribing": voice.transcribing,
                 "speaking": voice.speaking,
+                "watching": voice.watching,
                 "level": voice.level,
             }
         conversation = self._conversation()
@@ -572,6 +575,8 @@ class IrisOrb(Widget):
                 status = "trabalhando…"
             elif just_done:
                 status = "concluído ✓"
+            elif state.watching:
+                status = "diga “Íris”"
             else:
                 status = "pronto"
         label = Text(no_wrap=True, overflow="crop")

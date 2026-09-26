@@ -208,6 +208,15 @@ Nos modos com ditado, aperte **F9** e comece a frase com **"Íris"** — em vez 
 
 Sem o "Íris" no começo, é ditado normal. Se ela não reconhecer o comando, o texto vai para o campo de digitação (nada se perde). Desative em *Voz → Comandos de voz*.
 
+### Palavra de ativação
+
+Com *Voz → Palavra de ativação* ligada (e um modo com ditado), não precisa do F9: diga **"Íris, abre o Gemini"** de uma vez, ou "Íris…", espere o círculo mostrar OUVINDO e diga o resto. Sob o círculo aparece *diga "Íris"* enquanto ela espera. Funciona em duas etapas, pensadas para ambiente barulhento:
+
+1. Um vigia leve ([Vosk](https://alphacephei.com/vosk/), modelo pt de ~50 MB, só no processador) escuta o tempo todo, mas só reconhece a palavra "íris". Ele pausa enquanto a Íris fala, para não acordar com a própria voz.
+2. Ao ouvir a palavra, a gravação continua dali, incluindo o áudio de antes, e o Whisper transcreve. Só vale se a frase começar com "Íris": "vi a íris do olho dele" é descartado. "Íris, <texto>" que não é comando vai para o campo de digitação.
+
+O modelo do Vosk é baixado no primeiro uso. Teste de ponta a ponta com fala sintetizada: `voz/tests/test_wake.py`.
+
 **Motores:** fala com [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (natural, ideal com GPU; vozes Dora, Alex, Santa) ou [Piper](https://github.com/OHF-Voice/piper1-gpl) (leve, processador); escuta com [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (`large-v3-turbo` na GPU, `small` no processador). O modo *Automático* escolhe conforme a máquina.
 
 Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; geração de fala ~7× mais rápida que o tempo real.
@@ -217,7 +226,7 @@ Medido num notebook com RTX 3050 6 GB: transcrição de 7 s de fala em ~0,8 s; g
 Além das do Toad, em **Configurações**:
 
 - **Íris** — tema do olho (Arco ou Sharingan); modos tratados como nível máximo (padrão: bypass, yolo); cores de planejamento, execução, atenção e erro; cores por agente; palavras que identificam modos de planejamento; mostrar ou não o uso da assinatura; agentes mostrados na tela inicial.
-- **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, só CPU, envio automático do ditado.
+- **Voz** — modo, seu nome, frases por evento, motor, voz, velocidade, modelo do ditado, palavra de ativação, só CPU, envio automático do ditado.
 
 O arquivo fica em `%USERPROFILE%\.config\toad\toad.json`.
 

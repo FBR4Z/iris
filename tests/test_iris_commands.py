@@ -134,3 +134,45 @@ async def test_voice_commands_can_be_disabled(spoken):
         await pilot.pause(0.3)
         assert conversation.current_mode.id == "default"
         assert conversation.prompt.prompt_text_area.text == "Íris, modo planejamento"
+
+
+async def test_wake_word_transcripts(spoken):
+    """After the wake word, Whisper confirms: only text starting with "Íris" counts."""
+    write_settings({"voz": {"modo": "ditado_avisos", "ativacao": True}})
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start(pilot)
+        voice = app.iris_voice
+        text_area = conversation.prompt.prompt_text_area
+
+        # The wake event aims the transcript at the open conversation.
+        voice._handle_event({"event": "wake"})
+        voice._handle_event(
+            {"event": "transcript", "text": "Íris, modo planejamento.", "wake": True}
+        )
+        assert await wait_until(pilot, lambda: conversation.current_mode.id == "plan")
+
+        # False alarm: Vosk heard "íris", but the sentence isn't addressed to her.
+        voice._handle_event({"event": "wake"})
+        voice._handle_event(
+            {"event": "transcript", "text": "Eu vi a íris do olho dele.", "wake": True}
+        )
+        await pilot.pause(0.2)
+        assert text_area.text == ""
+
+        # "Íris, <free text>" is dictation, without the "unknown command" warning.
+        voice._handle_event({"event": "wake"})
+        voice._handle_event(
+            {"event": "transcript", "text": "Íris, refatora o main", "wake": True}
+        )
+        assert text_area.text == "refatora o main"
+        assert not any("Não reconheci" in str(n.message) for n in app._notifications)
+
+
+@pytest.mark.parametrize("mode, wake", [("ditado", True), ("avisos", False)])
+async def test_wake_flag_in_service_command(spoken, mode, wake):
+    """The wake word needs dictation: without it the service isn't asked to watch."""
+    write_settings({"voz": {"modo": mode, "ativacao": True}})
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE):
+        assert ("--wake" in app.iris_voice._command()) is wake

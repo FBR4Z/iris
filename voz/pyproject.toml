@@ -10,6 +10,8 @@ dependencies = [
     "piper-tts>=1.8.0",
     "sounddevice>=0.5.6",
     "soundfile>=0.14.0",
+    # Wake word ("Íris"): small, CPU-only keyword spotting.
+    "vosk>=0.3.45",
     # GPU (CUDA 12). Without an NVIDIA GPU everything falls back to the CPU.
     "onnxruntime-gpu<1.24",
     "nvidia-cublas-cu12>=12.9.2.10",

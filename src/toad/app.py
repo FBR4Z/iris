@@ -808,13 +808,7 @@ class ToadApp(App, inherit_bindings=False):
 
         conversation = self.screen.query_one_optional(Conversation)
         # Without a conversation (e.g. the launcher) only voice commands apply.
-        hint = "Íris, Claude, Codex, Gemini"
-        if conversation is not None:
-            try:
-                names = sorted(path.name for path in conversation.project_path.iterdir())
-                hint += ", " + ", ".join(names[:40])
-            except OSError:
-                pass
+        hint = self.iris_voice.dictation_hint(conversation)
         self.iris_voice.toggle_listen(conversation, hint=hint)
 
     def action_help_quit(self) -> None:

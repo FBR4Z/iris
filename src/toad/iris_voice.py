@@ -229,6 +229,8 @@ class IrisVoice:
         self.speaking = False
         self.listening = False
         self.transcribing = False
+        self.watching = False
+        """The service is waiting for the wake word."""
         self.level = 0.0
         self.engines = ""
         self.last_spoken = ""
@@ -269,6 +271,8 @@ class IrisVoice:
         command += ["--speed", str(self._get("velocidade", "1.0") or "1.0")]
         if self._get("somente_cpu", False):
             command.append("--cpu")
+        if dictation and self._get("ativacao", False):
+            command.append("--wake")
         return command
 
     # ------------------------------------------------------------------ process
@@ -316,6 +320,7 @@ class IrisVoice:
         process, self._process = self._process, None
         self._pending = []
         self.ready = self.speaking = self.listening = self.transcribing = False
+        self.watching = False
         self.level = 0.0
         if process is None or process.returncode is not None:
             return
@@ -346,6 +351,7 @@ class IrisVoice:
             self._handle_event(event)
         if process is self._process:
             self.ready = self.speaking = self.listening = self.transcribing = False
+            self.watching = False
             from toad import paths
 
             self.app.notify(
@@ -360,7 +366,11 @@ class IrisVoice:
         match event.get("event"):
             case "ready":
                 self.ready = True
+                wake = str(event.get("wake") or "off")
+                self.watching = wake != "off"
                 self.engines = f"fala: {event.get('tts')} · escuta: {event.get('stt')}"
+                if self.watching:
+                    self.engines += f" · ativação: {wake}"
                 if not self._greeted:
                     self._greeted = True
                     self.announce(
@@ -373,6 +383,8 @@ class IrisVoice:
                     self.announce(pending_event, **values)
             case "speaking":
                 self.speaking = bool(event.get("on"))
+            case "wake":
+                self._wake_heard()
             case "listening":
                 self.listening = bool(event.get("on"))
                 if not self.listening:
@@ -381,7 +393,9 @@ class IrisVoice:
                 self.level = float(event.get("value", 0.0))
             case "transcript":
                 self.transcribing = False
-                self._deliver_transcript(str(event.get("text", "")).strip())
+                self._deliver_transcript(
+                    str(event.get("text", "")).strip(), wake=bool(event.get("wake"))
+                )
             case "error":
                 self.app.notify(str(event.get("message")), title="Voz", severity="error")
 
@@ -450,6 +464,33 @@ class IrisVoice:
 
     # ------------------------------------------------------------------ listening
 
+    @staticmethod
+    def dictation_hint(conversation: Any) -> str:
+        """Words Whisper should expect: the agents and the project's file names."""
+        hint = "Íris, Claude, Codex, Gemini"
+        if conversation is not None:
+            try:
+                names = sorted(path.name for path in conversation.project_path.iterdir())
+                hint += ", " + ", ".join(names[:40])
+            except OSError:
+                pass
+        return hint
+
+    def _current_conversation(self) -> Any:
+        from toad.widgets.conversation import Conversation
+
+        try:
+            return self.app.screen.query_one_optional(Conversation)
+        except Exception:
+            return None
+
+    def _wake_heard(self) -> None:
+        """The service heard "Íris" and is recording the rest; aim it at this screen."""
+        self._transcript_target = self._current_conversation()
+        self.send({"cmd": "hint", "hint": self.dictation_hint(self._transcript_target)})
+        if self.speaking:
+            self.send({"cmd": "stop"})
+
     def toggle_listen(self, target: Any, hint: str = "") -> None:
         """Start dictation into `target` (a Conversation), or cancel it."""
         if not self.dictation:
@@ -467,19 +508,33 @@ class IrisVoice:
         self._transcript_target = target
         self.send({"cmd": "listen", "hint": hint})
 
-    def _deliver_transcript(self, text: str) -> None:
+    def _deliver_transcript(self, text: str, wake: bool = False) -> None:
         target, self._transcript_target = self._transcript_target, None
         if target is not None and not target.is_attached:
             target = None
-        self.handle_transcript(text, target)
+        self.handle_transcript(text, target, wake=wake)
 
-    def handle_transcript(self, text: str, target: Any) -> None:
-        """Run it as a voice command ("Íris, ...") or type it into `target`'s prompt."""
+    def handle_transcript(self, text: str, target: Any, wake: bool = False) -> None:
+        """Run it as a voice command ("Íris, ...") or type it into `target`'s prompt.
+
+        `wake`: recorded after the wake word. Whisper has the final say: if the text
+        doesn't start with "Íris" it was a false alarm (e.g. "a íris do olho") and is
+        dropped; "Íris, <texto livre>" is dictation.
+        """
         if not text:
             return
-        if self._get("comandos", True):
-            from toad.iris_commands import parse_command
+        from toad.iris_commands import parse_command, strip_wake_word
 
+        if wake:
+            rest = strip_wake_word(text)
+            if rest is None:
+                log(f"iris-voz: alarme falso da palavra de ativação: {text!r}")
+                return
+            if not self._get("comandos", True):
+                text = rest
+                if not text:
+                    return
+        if self._get("comandos", True):
             command = parse_command(text)
             if command is not None and command.name != "desconhecido":
                 self.app.run_worker(self._run_command(command, target))
@@ -487,10 +542,11 @@ class IrisVoice:
             if command is not None:
                 # Addressed to Íris but not a command: don't lose what was said.
                 text = command.argument
-                self.app.notify(
-                    "Não reconheci o comando; o texto foi para o campo de digitação.",
-                    title="Íris",
-                )
+                if not wake:  # with the wake word, "Íris, <text>" is how you dictate
+                    self.app.notify(
+                        "Não reconheci o comando; o texto foi para o campo de digitação.",
+                        title="Íris",
+                    )
         if target is None:
             self.app.notify("Abra uma conversa para ditar.", title="Voz")
             return

@@ -5,17 +5,24 @@ Protocolo: um JSON por linha. Comandos chegam pelo stdin, eventos saem pelo stdo
 Comandos:
   {"cmd": "say", "text": str, "cache": bool}   enfileira uma fala
   {"cmd": "stop"}                              para de falar e limpa a fila
-  {"cmd": "listen"}                            grava até o silêncio e transcreve
+  {"cmd": "listen", "hint": str}               grava até o silêncio e transcreve
+  {"cmd": "hint", "hint": str}                 dica para a próxima transcrição
   {"cmd": "cancel"}                            cancela a gravação em andamento
   {"cmd": "quit"}
 
 Eventos:
-  {"event": "ready", "tts": str, "stt": str}
+  {"event": "ready", "tts": str, "stt": str, "wake": str}
   {"event": "speaking", "on": bool}
+  {"event": "wake"}                            ouviu a palavra de ativação; a gravação começa
   {"event": "listening", "on": bool}
   {"event": "level", "value": float}           0..1, enquanto ouve ou fala
-  {"event": "transcript", "text": str}
+  {"event": "transcript", "text": str, "wake": bool}
   {"event": "error", "message": str}
+
+Palavra de ativação (--wake): o Vosk, leve e no processador, vigia o microfone só
+pela palavra "íris". Quando ela aparece, a gravação continua dali (com o áudio de
+antes, para "Íris, abre o Gemini" dito de uma vez) e o Whisper transcreve; quem
+chamou confere se a frase começa mesmo com "Íris".
 """
 
 from __future__ import annotations
@@ -31,6 +38,8 @@ import sys
 import threading
 import time
 import wave
+import zipfile
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -44,12 +53,16 @@ MODEL_URLS = {
     "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
     "pt_BR-faber-medium.onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx",
     "pt_BR-faber-medium.onnx.json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json",
+    "vosk-model-small-pt-0.3": "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip",
 }
 """Voice model files, fetched on first use. (Whisper models are fetched by faster-whisper.)"""
 
+WAKE_MODEL = "vosk-model-small-pt-0.3"
+WAKE_WORD = "íris"
+
 
 def ensure_models(models: Path, names: list[str]) -> None:
-    """Download any missing model files into `models`."""
+    """Download any missing model files (or zipped model folders) into `models`."""
     import urllib.request
 
     models.mkdir(parents=True, exist_ok=True)
@@ -58,9 +71,16 @@ def ensure_models(models: Path, names: list[str]) -> None:
         if target.exists():
             continue
         log(f"baixando {name}…")
+        url = MODEL_URLS[name]
         partial = target.with_suffix(target.suffix + ".part")
-        urllib.request.urlretrieve(MODEL_URLS[name], partial)
-        partial.replace(target)
+        urllib.request.urlretrieve(url, partial)
+        if url.endswith(".zip"):
+            # The zip holds a folder with the model's name.
+            with zipfile.ZipFile(partial) as archive:
+                archive.extractall(models)
+            partial.unlink()
+        else:
+            partial.replace(target)
 
 
 # --------------------------------------------------------------------------- io
@@ -117,6 +137,9 @@ class Speaker:
         self._piper = None
         self._queue: queue.Queue[tuple[str, bool]] = queue.Queue()
         self._stop = threading.Event()
+        self.playing = False
+        self.stopped_at = 0.0
+        """monotonic() when the last phrase ended, so the wake watcher skips the echo."""
         cache_root = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "iris-voz" / "cache"
         self.cache_dir = cache_root / f"{self.engine}-{self.voice}-{self.speed}"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -191,6 +214,7 @@ class Speaker:
                 continue
             if self._stop.is_set():
                 continue
+            self.playing = True
             emit("speaking", on=True)
             block = max(int(rate * LEVEL_INTERVAL), 256)
             try:
@@ -205,7 +229,59 @@ class Speaker:
             except Exception as error:
                 emit("error", message=f"Áudio: {error}")
             emit("level", value=0.0)
+            self.playing = False
+            self.stopped_at = time.monotonic()
             emit("speaking", on=False)
+
+
+# ------------------------------------------------------------------- microphone
+
+
+class Microphone:
+    """One input stream shared by whoever is listening (wake watcher, dictation).
+
+    Each subscriber gets its own queue of 16 kHz mono float32 blocks. The stream is
+    open only while someone is subscribed.
+    """
+
+    BLOCK = int(MIC_RATE * LEVEL_INTERVAL)
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._subscribers: list[queue.Queue[np.ndarray]] = []
+        self._stream = None
+
+    def subscribe(self) -> queue.Queue[np.ndarray]:
+        import sounddevice as sd
+
+        blocks: queue.Queue[np.ndarray] = queue.Queue()
+        with self._lock:
+            self._subscribers.append(blocks)
+            if self._stream is None:
+                self._stream = sd.InputStream(
+                    samplerate=MIC_RATE,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=self.BLOCK,
+                    callback=self._callback,
+                )
+                self._stream.start()
+        return blocks
+
+    def unsubscribe(self, blocks: queue.Queue[np.ndarray]) -> None:
+        with self._lock:
+            if blocks in self._subscribers:
+                self._subscribers.remove(blocks)
+            if not self._subscribers and self._stream is not None:
+                stream, self._stream = self._stream, None
+                stream.stop()
+                stream.close()
+
+    def _callback(self, indata, frames, time_info, status) -> None:
+        block = indata[:, 0].copy()
+        with self._lock:
+            for blocks in self._subscribers:
+                blocks.put(block)
 
 
 # -------------------------------------------------------------------------- stt
@@ -217,17 +293,24 @@ class Listener:
     MAX_SECONDS = 20.0
     NO_SPEECH_SECONDS = 6.0
     END_SILENCE_SECONDS = 1.0
+    WAKE_PAUSE_SECONDS = 3.0
+    """After the wake word alone ("Íris…"), how long to wait for the rest."""
 
-    def __init__(self, model: str, cuda: bool):
+    def __init__(self, model: str, cuda: bool, microphone: Microphone):
         if model == "auto":
             model = "large-v3-turbo" if cuda else "small"
         self.model_name = model
         self.device = "cuda" if cuda else "cpu"
         self.compute = "float16" if cuda else "int8"
+        self.microphone = microphone
         self._model = None
         self._cancel = threading.Event()
         self._busy = threading.Lock()
         self.hint = ""
+
+    @property
+    def busy(self) -> bool:
+        return self._busy.locked()
 
     @property
     def description(self) -> str:
@@ -242,27 +325,47 @@ class Listener:
     def cancel(self) -> None:
         self._cancel.set()
 
-    def listen(self) -> None:
+    def listen(
+        self,
+        preroll: list[np.ndarray] | None = None,
+        floor: float | None = None,
+        blocks: queue.Queue[np.ndarray] | None = None,
+    ) -> None:
+        """Record and transcribe.
+
+        With `preroll` (the wake word's audio) it carries on from there; `blocks` is a
+        microphone subscription already taken, so nothing is lost in the hand-over.
+        """
         if not self._busy.acquire(blocking=False):
+            if blocks is not None:
+                self.microphone.unsubscribe(blocks)
             return
         try:
-            self._listen()
+            self._listen(preroll, floor, blocks)
         finally:
             self._busy.release()
 
-    def _record(self) -> np.ndarray:
-        import sounddevice as sd
-
-        frames: list[np.ndarray] = []
-        block = int(MIC_RATE * LEVEL_INTERVAL)
-        floor = None
+    def _record(
+        self,
+        preroll: list[np.ndarray] | None,
+        floor: float | None,
+        blocks: queue.Queue[np.ndarray] | None,
+    ) -> np.ndarray:
+        frames: list[np.ndarray] = list(preroll or [])
+        wake = preroll is not None
+        # After the wake word the speaker is mid-sentence: no calibration, and a
+        # longer pause is fine until they say the rest.
         speech_started = False
         silence = 0.0
-        elapsed = 0.0
-        with sd.InputStream(samplerate=MIC_RATE, channels=1, dtype="float32", blocksize=block) as stream:
+        elapsed = 0.3 if wake else 0.0
+        if blocks is None:
+            blocks = self.microphone.subscribe()
+        try:
             while not self._cancel.is_set():
-                chunk, _ = stream.read(block)
-                chunk = chunk[:, 0].copy()
+                try:
+                    chunk = blocks.get(timeout=1.0)
+                except queue.Empty:
+                    raise RuntimeError("o microfone parou de enviar áudio")
                 frames.append(chunk)
                 elapsed += LEVEL_INTERVAL
                 rms = float(np.sqrt(np.mean(chunk**2)))
@@ -279,17 +382,28 @@ class Listener:
                     silence += LEVEL_INTERVAL
                 if speech_started and silence >= self.END_SILENCE_SECONDS:
                     break
-                if not speech_started and elapsed >= self.NO_SPEECH_SECONDS:
-                    return np.zeros(0, dtype=np.float32)
+                if not speech_started:
+                    if wake and silence >= self.WAKE_PAUSE_SECONDS:
+                        break  # just "Íris": transcribe what we have
+                    if not wake and elapsed >= self.NO_SPEECH_SECONDS:
+                        return np.zeros(0, dtype=np.float32)
                 if elapsed >= self.MAX_SECONDS:
                     break
+        finally:
+            self.microphone.unsubscribe(blocks)
         return np.concatenate(frames) if frames else np.zeros(0, dtype=np.float32)
 
-    def _listen(self) -> None:
+    def _listen(
+        self,
+        preroll: list[np.ndarray] | None,
+        floor: float | None,
+        blocks: queue.Queue[np.ndarray] | None,
+    ) -> None:
+        wake = preroll is not None
         self._cancel.clear()
         emit("listening", on=True)
         try:
-            audio = self._record()
+            audio = self._record(preroll, floor, blocks)
         except Exception as error:
             emit("error", message=f"Microfone: {error}")
             audio = np.zeros(0, dtype=np.float32)
@@ -297,7 +411,7 @@ class Listener:
             emit("level", value=0.0)
             emit("listening", on=False)
         if self._cancel.is_set() or not len(audio):
-            emit("transcript", text="")
+            emit("transcript", text="", wake=wake)
             return
         if self._model is None:
             self.load()
@@ -308,7 +422,117 @@ class Listener:
             vad_filter=True,
             initial_prompt=self.hint or None,
         )
-        emit("transcript", text=" ".join(segment.text.strip() for segment in segments))
+        text = " ".join(segment.text.strip() for segment in segments)
+        emit("transcript", text=text, wake=wake)
+
+
+# ------------------------------------------------------------------------- wake
+
+
+class WakeWatcher:
+    """Keeps an ear out for the wake word with Vosk, then hands over to the Listener.
+
+    Vosk runs with a grammar of just the wake word (anything else is "[unk]"), so it
+    is cheap enough to stay on all the time on the CPU. It pauses while Íris speaks
+    (so she doesn't wake herself) and while dictation is recording.
+    """
+
+    PREROLL_SECONDS = 2.0
+    ECHO_SECONDS = 0.6
+    """Ignore the microphone this long after Íris stops talking."""
+
+    def __init__(
+        self,
+        models: Path,
+        microphone: Microphone,
+        listener: Listener,
+        speaker: Speaker | None,
+        word: str = WAKE_WORD,
+    ):
+        self.models = models
+        self.microphone = microphone
+        self.listener = listener
+        self.speaker = speaker
+        self.word = word
+        self._model = None
+        self._stop = threading.Event()
+
+    @property
+    def description(self) -> str:
+        return f"vosk/{self.word}"
+
+    def load(self) -> None:
+        ensure_models(self.models, [WAKE_MODEL])
+        from vosk import Model, SetLogLevel
+
+        SetLogLevel(-1)
+        self._model = Model(str(self.models / WAKE_MODEL))
+
+    def _recognizer(self):
+        from vosk import KaldiRecognizer
+
+        grammar = json.dumps([self.word, "[unk]"], ensure_ascii=False)
+        return KaldiRecognizer(self._model, MIC_RATE, grammar)
+
+    def _paused(self) -> bool:
+        if self.listener.busy:
+            return True
+        if self.speaker is not None:
+            if self.speaker.playing:
+                return True
+            if time.monotonic() - self.speaker.stopped_at < self.ECHO_SECONDS:
+                return True
+        return False
+
+    def heard(self, recognizer, block: np.ndarray) -> bool:
+        """Feed one block; True when the wake word shows up."""
+        pcm = (np.clip(block, -1, 1) * 32767).astype(np.int16).tobytes()
+        if recognizer.AcceptWaveform(pcm):
+            text = json.loads(recognizer.Result()).get("text", "")
+        else:
+            text = json.loads(recognizer.PartialResult()).get("partial", "")
+        return self.word in text.split()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        keep = int(self.PREROLL_SECONDS / LEVEL_INTERVAL)
+        preroll: deque[np.ndarray] = deque(maxlen=keep)
+        levels: deque[float] = deque(maxlen=keep * 2)
+        recognizer = self._recognizer()
+        blocks = self.microphone.subscribe()
+        try:
+            while not self._stop.is_set():
+                try:
+                    block = blocks.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                if self._paused():
+                    # Start afresh afterwards: no stale audio, no half-heard word.
+                    if preroll:
+                        preroll.clear()
+                        recognizer = self._recognizer()
+                    continue
+                preroll.append(block)
+                levels.append(float(np.sqrt(np.mean(block**2))))
+                if not self.heard(recognizer, block):
+                    continue
+                # A quiet-ish percentile of the recent level is the room's noise floor.
+                floor = float(np.percentile(levels, 20)) if levels else None
+                emit("wake")
+                audio, preroll = list(preroll), deque(maxlen=keep)
+                recognizer = self._recognizer()
+                threading.Thread(
+                    target=self.listener.listen,
+                    args=(audio, floor, self.microphone.subscribe()),
+                    daemon=True,
+                    name="listener",
+                ).start()
+                # Let the listener take the busy lock before we look again.
+                time.sleep(LEVEL_INTERVAL * 2)
+        finally:
+            self.microphone.unsubscribe(blocks)
 
 
 # ------------------------------------------------------------------------- main
@@ -322,6 +546,9 @@ def main() -> None:
     parser.add_argument("--voice", default="pf_dora", help="voz do Kokoro")
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--cpu", action="store_true", help="ignora a GPU")
+    parser.add_argument(
+        "--wake", action="store_true", help='vigia a palavra "Íris" (precisa de --stt)'
+    )
     parser.add_argument("--models", default=os.environ.get("IRIS_VOZ_MODELS", str(DEFAULT_MODELS)))
     args = parser.parse_args()
 
@@ -330,8 +557,13 @@ def main() -> None:
     add_cuda_dlls()
     cuda = has_cuda() and not args.cpu
 
-    speaker = None if args.tts == "off" else Speaker(args.tts, args.voice, args.speed, Path(args.models), cuda)
-    listener = None if args.stt == "off" else Listener(args.stt, cuda)
+    models = Path(args.models)
+    microphone = Microphone()
+    speaker = None if args.tts == "off" else Speaker(args.tts, args.voice, args.speed, models, cuda)
+    listener = None if args.stt == "off" else Listener(args.stt, cuda, microphone)
+    watcher = None
+    if args.wake and listener is not None:
+        watcher = WakeWatcher(models, microphone, listener, speaker)
 
     try:
         if speaker is not None:
@@ -341,11 +573,19 @@ def main() -> None:
     except Exception as error:
         emit("error", message=f"Falha ao carregar modelos: {error}")
         sys.exit(1)
+    if watcher is not None:
+        # Without the wake word, dictation (F9) still works.
+        try:
+            watcher.load()
+        except Exception as error:
+            emit("error", message=f"Palavra de ativação indisponível: {error}")
+            watcher = None
 
     emit(
         "ready",
         tts=speaker.description if speaker else "off",
         stt=listener.description if listener else "off",
+        wake=watcher.description if watcher else "off",
     )
     if args.command == "check":
         if speaker is not None:
@@ -356,6 +596,8 @@ def main() -> None:
 
     if speaker is not None:
         threading.Thread(target=speaker.run, daemon=True, name="speaker").start()
+    if watcher is not None:
+        threading.Thread(target=watcher.run, daemon=True, name="wake").start()
 
     for line in sys.stdin:
         try:
@@ -372,10 +614,14 @@ def main() -> None:
                 speaker.stop()  # don't transcribe ourselves
             listener.hint = str(message.get("hint", ""))
             threading.Thread(target=listener.listen, daemon=True, name="listener").start()
+        elif command == "hint" and listener is not None:
+            listener.hint = str(message.get("hint", ""))
         elif command == "cancel" and listener is not None:
             listener.cancel()
         elif command == "quit":
             break
+    if watcher is not None:
+        watcher.stop()
 
 
 if __name__ == "__main__":

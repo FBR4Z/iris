@@ -512,6 +512,13 @@ SCHEMA: list[SchemaDict] = [
                 "default": True,
             },
             {
+                "key": "ativacao",
+                "title": 'Palavra de ativação ("Íris")?',
+                "help": "Diga 'Íris' e o comando ou o texto, sem apertar F9 (ex.: 'Íris, abre o Gemini'). Um vigia leve (Vosk, no processador) espera a palavra; o que vem depois é transcrito pelo modelo do ditado e só vale se começar com 'Íris'. Requer um modo com ditado.",
+                "type": "boolean",
+                "default": False,
+            },
+            {
                 "key": "enviar_ditado",
                 "title": "Enviar o ditado automaticamente?",
                 "help": "Se desligado, o texto ditado vai para o campo de digitação para você revisar.",
