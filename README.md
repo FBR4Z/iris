@@ -130,7 +130,7 @@ Com o Claude, embaixo do círculo aparece quanto dos limites da assinatura você
 5h 17% ↻14:00 · semana 9%
 ```
 
-`5h` é a janela de 5 horas (com o horário em que ela zera) e `semana` é o limite semanal. O texto fica amarelo a partir de 70% e vermelho a partir de 90%; quando o limite estoura, aparece **limite atingido** e o horário da volta. Com a voz em modo de avisos, a Íris avisa uma vez ao passar de 80% e de 95%. Os números vêm do próprio Claude Code a cada resposta; Codex e Gemini ainda não informam isso. Para esconder, desmarque *Configurações → Íris → Mostrar uso da assinatura*.
+`5h` é a janela de 5 horas (com o horário em que ela zera) e `semana` é o limite semanal. O texto fica amarelo a partir de 70% e vermelho a partir de 90%; quando o limite estoura, aparece **limite atingido** e o horário da volta. Com a voz em modo de avisos, a Íris avisa uma vez ao passar de 80% e de 95%. Os números vêm do servidor, via Claude Code, depois de algumas respostas, e contam o uso da conta inteira (outros computadores, celular, claude.ai); Codex e Gemini ainda não informam isso. Ao abrir, a Íris mostra o último valor recebido em cinza e com a idade, por exemplo `5h 42% (há 3h)`. Esse valor não inclui o que você usou em outros lugares depois disso; ele volta à cor normal quando chega o número atualizado. Para esconder, desmarque *Configurações → Íris → Mostrar uso da assinatura*.
 
 ## Voz
 

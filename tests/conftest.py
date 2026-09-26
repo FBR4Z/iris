@@ -87,9 +87,12 @@ def fresh_settings():
     from toad import paths
 
     settings_file = paths.get_config() / "toad.json"
+    usage_file = paths.get_state() / "iris-usage.json"
     settings_file.unlink(missing_ok=True)
+    usage_file.unlink(missing_ok=True)
     yield
     settings_file.unlink(missing_ok=True)
+    usage_file.unlink(missing_ok=True)
 
 
 async def wait_until(pilot, predicate, timeout: float = 20.0) -> bool:

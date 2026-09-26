@@ -125,6 +125,31 @@ async def test_prompt_round_trip_with_fake_agent():
         assert "semana 12%" in orb.render().plain
 
 
+async def test_saved_usage_shown_dim_until_the_agent_reports():
+    from time import time
+
+    from toad import paths
+    from toad.iris_usage import RateLimits, UsageWindow, save_rate_limits
+
+    usage_file = paths.get_state() / "iris-usage.json"
+    old = RateLimits((UsageWindow("five_hour", 0.4, time() + 3600),))
+    save_rate_limits(old, usage_file, now=time() - 2 * 3600)
+
+    app = ToadApp(agent_data=agent_data(), project_dir=".")
+    async with app.run_test(size=SIZE) as pilot:
+        conversation = await start_conversation(pilot)
+        orb = app.screen.query_one(IrisOrb)
+        assert await wait_until(pilot, lambda: "5h 40%" in orb.render().plain)
+        assert "(há 2h)" in orb.render().plain
+
+        conversation.prompt.append("olá")
+        conversation.prompt.prompt_text_area.action_submit()
+        assert await wait_until(pilot, lambda: "5h 83%" in orb.render().plain)
+        assert "(há" not in orb.render().plain
+    # The live value is what the next Íris starts with.
+    assert "0.83" in usage_file.read_text(encoding="utf-8")
+
+
 async def test_usage_announced_once(spoken):
     write_settings({"voz": {"modo": "avisos"}})
     app = ToadApp(agent_data=agent_data(), project_dir=".")

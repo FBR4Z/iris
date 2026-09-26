@@ -6,8 +6,11 @@ from toad.iris_usage import (
     RateLimits,
     UsageWindow,
     crossed_levels,
+    format_age,
     format_reset,
+    load_rate_limits,
     parse_rate_limits,
+    save_rate_limits,
     usage_segments,
 )
 
@@ -83,6 +86,37 @@ def test_usage_resets_to_zero_after_the_window():
     limits = parse_rate_limits(META)
     after = IN_4H + 60
     assert plain(usage_segments(limits, after)) == "5h 0% · semana 9%"
+
+
+def test_saved_limits_round_trip(tmp_path):
+    path = tmp_path / "iris-usage.json"
+    assert load_rate_limits(path) is None
+    save_rate_limits(parse_rate_limits(META), path, now=NOW - 3 * 3600)
+    limits = load_rate_limits(path)
+    assert limits is not None and limits.saved_at == NOW - 3 * 3600
+    assert [(w.key, w.utilization, w.resets_at) for w in limits.windows] == [
+        ("five_hour", 0.17, IN_4H),
+        ("seven_day", 0.09, SATURDAY),
+    ]
+    path.write_text("{lixo", encoding="utf-8")
+    assert load_rate_limits(path) is None
+
+
+def test_saved_limits_are_dim_with_their_age():
+    limits = RateLimits(
+        (UsageWindow("five_hour", 0.92, IN_4H), UsageWindow("seven_day", 0.09, SATURDAY)),
+        saved_at=NOW - 3 * 3600,
+    )
+    segments = usage_segments(limits, NOW)
+    assert plain(segments) == "5h 92% ↻14:00 · semana 9% (há 3h)"
+    assert {level for _, level in segments} == {"dim"}
+
+
+def test_format_age():
+    assert format_age(5) == "há 1min"
+    assert format_age(25 * 60) == "há 25min"
+    assert format_age(3 * 3600 + 59 * 60) == "há 3h"
+    assert format_age(2 * 86400) == "há 2d"
 
 
 def test_crossed_levels_announce_once_per_reset():

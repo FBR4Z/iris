@@ -955,11 +955,13 @@ class Conversation(containers.Vertical):
 
     @on(acp_messages.RateLimitUpdate)
     def on_acp_rate_limit_update(self, message: acp_messages.RateLimitUpdate):
-        from toad.iris_usage import SPOKEN_WINDOWS, crossed_levels
+        from toad import paths
+        from toad.iris_usage import SPOKEN_WINDOWS, crossed_levels, save_rate_limits
 
         # Limits belong to the account, not the session: keep them on the app so the
         # orb shows them in every session.
         self.app.iris_rate_limits = message.limits
+        save_rate_limits(message.limits, paths.get_state() / "iris-usage.json")
         announced = self.app.iris_usage_announced
         crossed = crossed_levels(message.limits, announced)
         if (voice := self._iris_voice()) is not None:

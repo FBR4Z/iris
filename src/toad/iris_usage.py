@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from time import time
 from typing import Any
 
@@ -48,6 +51,8 @@ class RateLimits:
     """The agent refused to work until a window resets."""
     resets_at: float | None = None
     """When the binding window resets."""
+    saved_at: float | None = None
+    """Set when loaded from disk: when the agent last reported it (shown dimmed, with its age)."""
 
     def window(self, key: str) -> UsageWindow | None:
         return next((window for window in self.windows if window.key == key), None)
@@ -88,6 +93,51 @@ def parse_rate_limits(meta: Any) -> RateLimits | None:
     return RateLimits(tuple(windows), limited, _number(data.get("resetsAt")))
 
 
+def save_rate_limits(limits: RateLimits, path: Path, now: float | None = None) -> None:
+    """Remember the latest limits, so the next Íris starts with them (dimmed)."""
+    data = {
+        "saved_at": time() if now is None else now,
+        "limited": limits.limited,
+        "resets_at": limits.resets_at,
+        "windows": [
+            {"key": w.key, "utilization": w.utilization, "resets_at": w.resets_at}
+            for w in limits.windows
+        ],
+    }
+    with suppress(OSError):
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def load_rate_limits(path: Path) -> RateLimits | None:
+    """Limits saved by a previous Íris, or None if missing or unreadable."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        windows = tuple(
+            UsageWindow(
+                str(entry["key"]),
+                min(max(float(entry["utilization"]), 0.0), 1.0),
+                _number(entry.get("resets_at")),
+            )
+            for entry in data["windows"]
+        )
+        saved_at = _number(data["saved_at"])
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if saved_at is None or (not windows and not data.get("limited")):
+        return None
+    return RateLimits(windows, bool(data.get("limited")), _number(data.get("resets_at")), saved_at)
+
+
+def format_age(seconds: float) -> str:
+    """"há 5min", "há 3h", "há 2d"."""
+    minutes = max(int(seconds // 60), 1)
+    if minutes < 60:
+        return f"há {minutes}min"
+    if minutes < 24 * 60:
+        return f"há {minutes // 60}h"
+    return f"há {minutes // (24 * 60)}d"
+
+
 def format_reset(resets_at: float | None, now: float | None = None) -> str:
     """Short local time for a reset: "14:00" today, "sáb 09:00" this week."""
     if resets_at is None:
@@ -117,8 +167,20 @@ def usage_segments(
     """Pieces of the usage line as (text, level) pairs.
 
     e.g. [("5h 17%", "ok"), (" ↻14:00", "dim"), (" · ", "dim"), ("semana 9%", "ok")]
+
+    Limits saved by a previous Íris are all "dim", followed by their age: usage on
+    other devices since then isn't counted until the agent reports again.
     """
     now = time() if now is None else now
+    segments = _live_segments(limits, now, compact)
+    if limits.saved_at is None:
+        return segments
+    segments = [(text, "dim") for text, _ in segments]
+    segments.append((f" ({format_age(now - limits.saved_at)})", "dim"))
+    return segments
+
+
+def _live_segments(limits: RateLimits, now: float, compact: bool) -> list[tuple[str, str]]:
     if limits.limited and (limits.resets_at is None or now < limits.resets_at):
         segments = [("limite atingido", "danger")]
         if reset := format_reset(limits.resets_at, now):
